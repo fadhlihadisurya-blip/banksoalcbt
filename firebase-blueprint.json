@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in CBT system (admin, teacher, or student)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "email": { "type": "string", "format": "email" },
+        "nis": { "type": "string" },
+        "classId": { "type": "string" },
+        "nip": { "type": "string" },
+        "subjectSpecialty": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "name", "role", "isActive"]
+    },
+    "ClassGroup": {
+      "title": "ClassGroup",
+      "description": "High school class or study group (Rombel)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gradeLevel": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "name": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "homeroomTeacher": { "type": "string" }
+      },
+      "required": ["id", "gradeLevel", "name"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "Question bank item with Bloom cognitive tier and options",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "chapterId": { "type": "string" },
+        "subchapterId": { "type": "string" },
+        "competencyId": { "type": "string" },
+        "cognitiveLevel": { "type": "string", "enum": ["LOTS", "MOTS", "HOTS"] },
+        "type": { "type": "string", "enum": ["pg", "pg_kompleks", "benar_salah", "esai"] },
+        "questionText": { "type": "string" },
+        "points": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "author": { "type": "string" }
+      },
+      "required": ["id", "subjectId", "cognitiveLevel", "type", "questionText", "points", "status"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Scheduled exam package with anti-cheating and token rules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "semester": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "kktpScore": { "type": "number" },
+        "token": { "type": "string" },
+        "isTokenActive": { "type": "boolean" },
+        "status": { "type": "string" },
+        "isPublishedResults": { "type": "boolean" },
+        "createdTeacherId": { "type": "string" }
+      },
+      "required": ["id", "title", "subjectId", "durationMinutes", "token", "status"]
+    },
+    "ExamSession": {
+      "title": "ExamSession",
+      "description": "Student real-time exam telemetry, progress, and anti-cheating incidents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentNis": { "type": "string" },
+        "className": { "type": "string" },
+        "status": { "type": "string", "enum": ["not_started", "in_progress", "completed", "disconnected", "suspicious"] },
+        "startedAt": { "type": "string" },
+        "remainingSeconds": { "type": "number" },
+        "currentQuestionIndex": { "type": "number" },
+        "violationCount": { "type": "number" },
+        "lastHeartbeat": { "type": "string" }
+      },
+      "required": ["id", "examId", "studentId", "status"]
+    },
+    "ExamResult": {
+      "title": "ExamResult",
+      "description": "Evaluated student exam score, cognitive achievement, and KKTP result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentNis": { "type": "string" },
+        "className": { "type": "string" },
+        "completedAt": { "type": "string" },
+        "finalScore": { "type": "number" },
+        "isPassed": { "type": "boolean" },
+        "kktpScore": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "wrongCount": { "type": "number" },
+        "emptyCount": { "type": "number" },
+        "totalQuestions": { "type": "number" }
+      },
+      "required": ["id", "examId", "studentId", "finalScore", "isPassed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "entities.User" },
+      "description": "Collection of school users (Admins, Teachers, Students)"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "entities.ClassGroup" },
+      "description": "Collection of academic classes and homeroom allocations"
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "entities.Question" },
+      "description": "Collection of question bank items with Bloom taxonomic level"
+    },
+    "/exams/{examId}": {
+      "schema": { "$ref": "entities.Exam" },
+      "description": "Collection of active and scheduled CBT exams"
+    },
+    "/exam_sessions/{sessionId}": {
+      "schema": { "$ref": "entities.ExamSession" },
+      "description": "Collection of active student exam sessions and telemetry"
+    },
+    "/exam_results/{resultId}": {
+      "schema": { "$ref": "entities.ExamResult" },
+      "description": "Collection of completed exam scores and auto-graded results"
+    }
+  }
+}

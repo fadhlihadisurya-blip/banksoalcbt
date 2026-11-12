@@ -1,0 +1,6 @@
+{
+  "name": "CBT SMA Pro + AI Learning Analytics",
+  "description": "Aplikasi Computer Based Test (CBT) modern untuk SMA dengan bank soal LOTS/MOTS/HOTS, generator ujian dinamis, randomisasi unik per siswa, live monitoring, anti-cheating, dan analisis pembelajaran berbasis AI Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
