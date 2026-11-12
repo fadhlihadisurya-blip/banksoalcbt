@@ -14,7 +14,14 @@ import {
   CheckCircle,
   XCircle,
   X,
+  Search,
 } from 'lucide-react';
+
+export function getFirstWordUsername(fullName: string): string {
+  if (!fullName) return '';
+  const firstWord = fullName.trim().split(/\s+/)[0] || '';
+  return firstWord.toLowerCase().replace(/[^a-z0-9_]/gi, '');
+}
 
 export const ClassManagementView: React.FC = () => {
   const [classes, setClasses] = useState<ClassGroup[]>([]);
@@ -23,6 +30,7 @@ export const ClassManagementView: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const [selectedClass, setSelectedClass] = useState<ClassGroup | null>(null);
+  const [studentSearch, setStudentSearch] = useState('');
 
   // 1. New Class Modal
   const [showAddClassModal, setShowAddClassModal] = useState(false);
@@ -79,7 +87,6 @@ export const ClassManagementView: React.FC = () => {
       setUsers(usersRes.users || []);
 
       if (fetchedClasses.length > 0) {
-        // Keep current selected class if still exists, otherwise select the first one
         setSelectedClass((prev) => {
           if (!prev) return fetchedClasses[0];
           const exists = fetchedClasses.find((c) => c.id === prev.id);
@@ -247,11 +254,10 @@ export const ClassManagementView: React.FC = () => {
   };
 
   const handleImportSample = () => {
-    const target = classes.find((c) => c.id === importTargetClassId)?.name || 'XII MIPA 1';
-    const sample = `name,nis,username,password
-"Andi Pratama",20241031,andi2024,siswa123
-"Bunga Citra",20241032,bunga2024,siswa123
-"Cahyo Utomo",20241033,cahyo2024,siswa123`;
+    const sample = `nomor,nis,nama lengkap
+1,20241031,Andi Pratama
+2,20241032,Bunga Citra
+3,20241033,Cahyo Utomo`;
     setCsvContent(sample);
   };
 
@@ -266,15 +272,26 @@ export const ClassManagementView: React.FC = () => {
       const lines = csvContent.trim().split('\n');
       const students: any[] = [];
 
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        // Skip header row if present
+        if (
+          i === 0 &&
+          (line.toLowerCase().includes('nomor') ||
+            line.toLowerCase().includes('nama') ||
+            line.toLowerCase().includes('nis'))
+        ) {
+          continue;
+        }
+
         const parts = line.split(',');
-        if (parts.length >= 2) {
-          const rawName = parts[0]?.replace(/^"|"$/g, '').trim();
-          const rawNis = parts[1]?.trim();
-          const rawUsername = parts[2]?.trim() || rawNis;
-          const rawPassword = parts[3]?.trim() || 'siswa123';
+        if (parts.length >= 3) {
+          const rawNis = parts[1]?.trim() || '';
+          const rawName = parts.slice(2).join(',').replace(/^"|"$/g, '').trim();
+          const firstWordUser = getFirstWordUsername(rawName);
+          const rawUsername = firstWordUser || rawNis;
+          const rawPassword = 'siswa123';
 
           if (rawName) {
             students.push({
@@ -282,6 +299,22 @@ export const ClassManagementView: React.FC = () => {
               nis: rawNis,
               username: rawUsername,
               password: rawPassword,
+              classId: importTargetClassId,
+            });
+          }
+        } else if (parts.length === 2) {
+          // Fallback if user omitted number column: nis, nama
+          const rawNis = parts[0]?.trim() || '';
+          const rawName = parts[1]?.replace(/^"|"$/g, '').trim();
+          const firstWordUser = getFirstWordUsername(rawName);
+          const rawUsername = firstWordUser || rawNis;
+
+          if (rawName) {
+            students.push({
+              name: rawName,
+              nis: rawNis,
+              username: rawUsername,
+              password: 'siswa123',
               classId: importTargetClassId,
             });
           }
@@ -305,11 +338,21 @@ export const ClassManagementView: React.FC = () => {
     }
   };
 
-  const classStudents = users.filter((u) => u.role === 'student' && u.classId === selectedClass?.id);
+  // Filter students for selected class and search
+  const classStudentsAll = users.filter((u) => u.role === 'student' && u.classId === selectedClass?.id);
+  const classStudents = classStudentsAll.filter((st) => {
+    if (!studentSearch.trim()) return true;
+    const q = studentSearch.toLowerCase();
+    return (
+      st.name.toLowerCase().includes(q) ||
+      (st.nis && st.nis.toLowerCase().includes(q)) ||
+      st.username.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
@@ -318,7 +361,7 @@ export const ClassManagementView: React.FC = () => {
           <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
             <span>Kurikulum Merdeka (Fase E & Fase F)</span>
             <span>·</span>
-            <span>Tingkat X, XI, dan XII</span>
+            <span>Total {classes.length} Kelas Rombel Terdaftar</span>
           </div>
         </div>
 
@@ -329,225 +372,214 @@ export const ClassManagementView: React.FC = () => {
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-xs transition-colors"
           >
             <Upload className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Impor Siswa</span>
+            <span>Impor Siswa (CSV)</span>
           </button>
 
-          {/* Tombol Tambah Kelas */}
+          {/* Tombol Tambah Kelas Baru */}
           <button
             onClick={() => setShowAddClassModal(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Tambah Kelas / Rombel</span>
+            <span>Tambah Kelas Baru</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Classes List */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Daftar Kelas ({classes.length})
-            </h3>
-            <span className="text-[11px] text-slate-400">Pilih untuk mengelola</span>
-          </div>
+      {/* DROPDOWN PEMILIHAN KELAS UTAMA */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-2">
+            <School className="w-4 h-4 text-indigo-600" />
+            <span>Pilih Kelas / Rombongan Belajar (Dropdown):</span>
+          </label>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <select
+              value={selectedClass?.id || ''}
+              onChange={(e) => {
+                const cls = classes.find((c) => c.id === e.target.value);
+                if (cls) setSelectedClass(cls);
+              }}
+              className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-2xs cursor-pointer"
+            >
+              {loading ? (
+                <option value="">Memuat data kelas...</option>
+              ) : classes.length === 0 ? (
+                <option value="">Belum ada kelas terdaftar (Klik &quot;Tambah Kelas Baru&quot;)</option>
+              ) : (
+                classes.map((c) => {
+                  const count = users.filter((u) => u.role === 'student' && u.classId === c.id).length;
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.name} (Tingkat {c.gradeLevel}) — {count} Siswa · Wali: {c.homeroomTeacher || 'Belum Ditentukan'}
+                    </option>
+                  );
+                })
+              )}
+            </select>
 
-          <div className="space-y-2">
-            {loading ? (
-              <div className="p-6 text-center text-xs text-slate-400 bg-white border border-slate-200 rounded-xl">
-                Memuat daftar kelas...
+            {selectedClass && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Tombol Edit Nama Kelas */}
+                <button
+                  onClick={() => handleOpenEditClass(selectedClass)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors shadow-2xs"
+                  title="Edit Nama / Wali Kelas Ini"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>Edit Kelas</span>
+                </button>
+                {/* Tombol Hapus Kelas */}
+                <button
+                  onClick={() => handleOpenDeleteClass(selectedClass)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors shadow-2xs"
+                  title="Hapus Kelas Ini"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Kelas</span>
+                </button>
               </div>
-            ) : classes.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 bg-white border border-slate-200 rounded-xl">
-                Belum ada kelas. Klik &quot;Tambah Kelas&quot; di atas.
-              </div>
-            ) : (
-              classes.map((cls) => {
-                const count = users.filter((u) => u.role === 'student' && u.classId === cls.id).length;
-                const isSelected = selectedClass?.id === cls.id;
-
-                return (
-                  <div
-                    key={cls.id}
-                    onClick={() => setSelectedClass(cls)}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
-                      isSelected
-                        ? 'bg-indigo-50/80 border-indigo-400 shadow-xs ring-1 ring-indigo-400/30'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 truncate">{cls.name}</span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                          Tingkat {cls.gradeLevel}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-0.5 truncate">
-                        Wali: {cls.homeroomTeacher || 'Belum Ditentukan'}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-md">
-                        {count} Siswa
-                      </span>
-
-                      {/* Tombol Edit Nama Kelas & Hapus Kelas */}
-                      <button
-                        onClick={(e) => handleOpenEditClass(cls, e)}
-                        className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-white transition-colors"
-                        title="Edit Nama Kelas"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={(e) => handleOpenDeleteClass(cls, e)}
-                        className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-white transition-colors"
-                        title="Hapus Kelas"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
             )}
           </div>
         </div>
+      </div>
 
-        {/* Selected Class Student Roster */}
-        <div className="md:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+      {/* RINCIAN SISWA DALAM KELAS TERPILIH */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 gap-3">
           <div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 gap-3">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Daftar Siswa Terdaftar: {selectedClass?.name || 'Pilih Kelas'}
-                  </h3>
-                  {selectedClass && (
-                    <div className="flex items-center gap-1">
-                      {/* Tombol Edit Nama Kelas */}
-                      <button
-                        onClick={() => handleOpenEditClass(selectedClass)}
-                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                        title="Edit Nama / Data Kelas"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      {/* Tombol Hapus Kelas */}
-                      <button
-                        onClick={() => handleOpenDeleteClass(selectedClass)}
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                        title="Hapus Kelas Ini"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Wali Kelas: {selectedClass?.homeroomTeacher || '-'} · Tingkat {selectedClass?.gradeLevel}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {selectedClass && (
-                  <button
-                    onClick={() => {
-                      setImportTargetClassId(selectedClass.id);
-                      setCsvContent('');
-                      setShowImportModal(true);
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/70 rounded-md transition-colors"
-                    title="Impor siswa langsung ke kelas ini"
-                  >
-                    <Upload className="w-3 h-3" />
-                    <span>Impor ke Kelas Ini</span>
-                  </button>
-                )}
-                <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
-                  Total: {classStudents.length} Siswa
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-base font-bold text-slate-900">
+                Daftar Siswa Terdaftar: {selectedClass?.name || 'Pilih Kelas'}
+              </h3>
+              {selectedClass && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                  Tingkat {selectedClass.gradeLevel}
                 </span>
-              </div>
+              )}
             </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Wali Kelas: <strong>{selectedClass?.homeroomTeacher || 'Belum Ditentukan'}</strong>
+            </p>
+          </div>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">No</th>
-                    <th className="py-2.5 px-3">Nama Lengkap</th>
-                    <th className="py-2.5 px-3">NIS</th>
-                    <th className="py-2.5 px-3">Username</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Aksi Siswa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {classStudents.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-10 text-center text-slate-400">
-                        Belum ada siswa yang dialokasikan ke kelas ini. Gunakan tombol &quot;Impor Siswa&quot; untuk menambahkan siswa.
+          <div className="flex items-center gap-2.5">
+            {selectedClass && (
+              <button
+                onClick={() => {
+                  setImportTargetClassId(selectedClass.id);
+                  setCsvContent('');
+                  setShowImportModal(true);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-colors shadow-2xs"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Impor Siswa ke Kelas Ini</span>
+              </button>
+            )}
+            <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg">
+              Total: {classStudentsAll.length} Siswa
+            </span>
+          </div>
+        </div>
+
+        {/* Search Filter for Students */}
+        {classStudentsAll.length > 0 && (
+          <div className="relative max-w-sm">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              placeholder="Cari siswa berdasarkan nama, NIS, atau username..."
+              className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        )}
+
+        {/* Student Roster Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="py-2.5 px-3">No</th>
+                <th className="py-2.5 px-3">NIS</th>
+                <th className="py-2.5 px-3">Nama Lengkap</th>
+                <th className="py-2.5 px-3">Username</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3 text-right">Aksi Siswa</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {classStudentsAll.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-10 text-center text-slate-400">
+                    Belum ada siswa yang dialokasikan ke kelas ini. Gunakan tombol &quot;Impor Siswa&quot; untuk mengalokasikan akun siswa.
+                  </td>
+                </tr>
+              ) : classStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                    Tidak ada siswa yang cocok dengan kata kunci pencarian.
+                  </td>
+                </tr>
+              ) : (
+                classStudents.map((st, i) => {
+                  const displayUsername = st.username || getFirstWordUsername(st.name);
+                  return (
+                    <tr key={st.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-2.5 px-3 font-mono text-slate-400">{i + 1}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-700 font-semibold">{st.nis || '-'}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">{st.name}</td>
+                      <td className="py-2.5 px-3 font-mono text-indigo-600 font-semibold">{displayUsername}</td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                            st.isActive ? 'text-emerald-700' : 'text-rose-600'
+                          }`}
+                        >
+                          {st.isActive ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 text-emerald-600" />
+                              <span>Aktif</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3 text-rose-600" />
+                              <span>Nonaktif</span>
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Tombol Edit Siswa */}
+                          <button
+                            onClick={() => handleOpenEditStudent(st)}
+                            className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="Edit Data Siswa"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          {/* Tombol Hapus Siswa */}
+                          <button
+                            onClick={() => handleOpenDeleteStudent(st)}
+                            className="px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="Hapus Siswa"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    classStudents.map((st, i) => (
-                      <tr key={st.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-2.5 px-3 font-mono text-slate-400">{i + 1}</td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-900">{st.name}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">{st.nis || '-'}</td>
-                        <td className="py-2.5 px-3 font-mono text-indigo-600">{st.username}</td>
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                              st.isActive ? 'text-emerald-700' : 'text-rose-600'
-                            }`}
-                          >
-                            {st.isActive ? (
-                              <>
-                                <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                <span>Aktif</span>
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="w-3 h-3 text-rose-600" />
-                                <span>Nonaktif</span>
-                              </>
-                            )}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Tombol Edit Siswa */}
-                            <button
-                              onClick={() => handleOpenEditStudent(st)}
-                              className="px-2 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
-                              title="Edit Data Siswa"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span>Edit</span>
-                            </button>
-
-                            {/* Tombol Hapus Siswa */}
-                            <button
-                              onClick={() => handleOpenDeleteStudent(st)}
-                              className="px-2 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
-                              title="Hapus Siswa"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              <span>Hapus</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -949,13 +981,13 @@ export const ClassManagementView: React.FC = () => {
 
               <div>
                 <div className="flex items-center justify-between text-slate-600 mb-1">
-                  <span>Tempelkan data CSV (name, nis, username, password):</span>
+                  <span>Tempelkan data CSV (nomor, nis, nama lengkap):</span>
                   <button
                     onClick={handleImportSample}
                     className="text-indigo-600 font-semibold hover:underline flex items-center gap-1"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Muat Contoh Format</span>
+                    <span>Muat Contoh Format (3 Kolom)</span>
                   </button>
                 </div>
 
@@ -963,13 +995,13 @@ export const ClassManagementView: React.FC = () => {
                   value={csvContent}
                   onChange={(e) => setCsvContent(e.target.value)}
                   rows={6}
-                  placeholder="name,nis,username,password..."
+                  placeholder={`nomor,nis,nama lengkap\n1,20241031,Andi Pratama\n2,20241032,Bunga Citra\n3,20241033,Cahyo Utomo`}
                   className="w-full p-2.5 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
               </div>
 
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-[11px] leading-relaxed">
-                <strong>Catatan:</strong> Baris pertama adalah judul kolom (`name,nis,username,password`). Kolom `username` dan `password` bersifat opsional (default password: <code>siswa123</code>).
+                <strong>Catatan:</strong> Cukup 3 kolom: <code>nomor, nis, nama lengkap</code>. Username otomatis dibuat dari kata pertama nama lengkap (huruf kecil), dan kata sandi awal default: <code>siswa123</code>.
               </div>
             </div>
 

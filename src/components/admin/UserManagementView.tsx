@@ -210,10 +210,10 @@ export const UserManagementView: React.FC = () => {
   };
 
   const handleImportSample = () => {
-    const sample = `name,nis,classId,username,password
-"Alifia Maharani",20241010,cls-xii-mipa-1,alifia,siswa123
-"Bagas Triadi",20241011,cls-xii-mipa-1,bagas,siswa123
-"Citra Lestari",20241012,cls-xii-mipa-2,citra,siswa123`;
+    const sample = `nomor,nis,nama lengkap
+1,20241031,Andi Pratama
+2,20241032,Bunga Citra
+3,20241033,Cahyo Utomo`;
     setCsvContent(sample);
   };
 
@@ -222,20 +222,57 @@ export const UserManagementView: React.FC = () => {
     try {
       const lines = csvContent.trim().split('\n');
       const students: any[] = [];
+      const defaultClassId = classes[0]?.id || '';
 
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (
+          i === 0 &&
+          (line.toLowerCase().includes('nomor') ||
+            line.toLowerCase().includes('nama') ||
+            line.toLowerCase().includes('nis'))
+        ) {
+          continue;
+        }
+
         const parts = line.split(',');
         if (parts.length >= 3) {
-          students.push({
-            name: parts[0]?.replace(/^"|"$/g, '').trim(),
-            nis: parts[1]?.trim(),
-            classId: parts[2]?.trim() || classes[0]?.id,
-            username: parts[3]?.trim() || parts[1]?.trim(),
-            password: parts[4]?.trim() || 'siswa123',
-          });
+          const rawNis = parts[1]?.trim() || '';
+          const rawName = parts.slice(2).join(',').replace(/^"|"$/g, '').trim();
+          const firstWord = rawName.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9_]/gi, '') || '';
+          const rawUsername = firstWord || rawNis;
+
+          if (rawName) {
+            students.push({
+              name: rawName,
+              nis: rawNis,
+              classId: defaultClassId,
+              username: rawUsername,
+              password: 'siswa123',
+            });
+          }
+        } else if (parts.length === 2) {
+          const rawNis = parts[0]?.trim() || '';
+          const rawName = parts[1]?.replace(/^"|"$/g, '').trim();
+          const firstWord = rawName.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9_]/gi, '') || '';
+          const rawUsername = firstWord || rawNis;
+
+          if (rawName) {
+            students.push({
+              name: rawName,
+              nis: rawNis,
+              classId: defaultClassId,
+              username: rawUsername,
+              password: 'siswa123',
+            });
+          }
         }
+      }
+
+      if (students.length === 0) {
+        alert('Tidak ada data siswa valid yang dapat diimpor.');
+        return;
       }
 
       const res = await api.bulkImportStudents(students);
@@ -623,13 +660,13 @@ export const UserManagementView: React.FC = () => {
 
             <div className="mt-4 space-y-3 text-xs">
               <div className="flex items-center justify-between text-slate-600">
-                <span>Tempelkan data CSV (name, nis, classId, username, password):</span>
+                <span>Tempelkan data CSV (nomor, nis, nama lengkap):</span>
                 <button
                   onClick={handleImportSample}
                   className="text-indigo-600 font-semibold hover:underline flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Muat Format Contoh</span>
+                  <span>Muat Format Contoh (3 Kolom)</span>
                 </button>
               </div>
 
@@ -637,9 +674,13 @@ export const UserManagementView: React.FC = () => {
                 value={csvContent}
                 onChange={(e) => setCsvContent(e.target.value)}
                 rows={6}
-                placeholder="name,nis,classId,username,password..."
+                placeholder={`nomor,nis,nama lengkap\n1,20241031,Andi Pratama\n2,20241032,Bunga Citra\n3,20241033,Cahyo Utomo`}
                 className="w-full p-2.5 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-[11px] leading-relaxed">
+                <strong>Catatan:</strong> Cukup 3 kolom: <code>nomor, nis, nama lengkap</code>. Username otomatis diambil dari kata pertama nama lengkap (huruf kecil), dan password default: <code>siswa123</code>.
+              </div>
             </div>
 
             <div className="pt-4 mt-4 border-t border-slate-200 flex justify-end gap-2">
