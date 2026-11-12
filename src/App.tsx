@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { AppLayout, NavTab } from './components/layout/AppLayout';
 import { LoginView } from './components/auth/LoginView';
 import { AdminDashboard } from './components/dashboard/AdminDashboard';
@@ -13,6 +14,8 @@ import { ExamResultsView } from './components/results/ExamResultsView';
 import { AIAnalyticsView } from './components/analytics/AIAnalyticsView';
 import { ClassManagementView } from './components/admin/ClassManagementView';
 import { UserManagementView } from './components/admin/UserManagementView';
+import { TaxonomyManagementView } from './components/admin/TaxonomyManagementView';
+import { SchoolSettingsView } from './components/admin/SchoolSettingsView';
 import { ExamTakingView } from './components/exam/ExamTakingView';
 import { Exam, ExamSession, StudentQuestionItem } from './types/cbt';
 import { api } from './lib/api';
@@ -98,6 +101,10 @@ function MainApp() {
           return <UserManagementView />;
         case 'bank':
           return <QuestionBankView />;
+        case 'taxonomy':
+          return <TaxonomyManagementView />;
+        case 'settings':
+          return <SchoolSettingsView />;
         case 'exams':
           return (
             <TeacherDashboard
@@ -249,8 +256,10 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainApp />
-    </AuthProvider>
+    <SettingsProvider>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
+    </SettingsProvider>
   );
 }

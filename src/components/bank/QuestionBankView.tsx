@@ -26,6 +26,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { DocxImportModal } from './DocxImportModal';
 
 export const QuestionBankView: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -46,6 +47,7 @@ export const QuestionBankView: React.FC = () => {
   // Filters
   const [filterSubject, setFilterSubject] = useState('');
   const [filterChapter, setFilterChapter] = useState('');
+  const [filterSubchapter, setFilterSubchapter] = useState('');
   const [filterCognitive, setFilterCognitive] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -55,6 +57,7 @@ export const QuestionBankView: React.FC = () => {
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDocxImportModal, setShowDocxImportModal] = useState(false);
   const [csvContent, setCsvContent] = useState('');
 
   // Form states
@@ -121,12 +124,26 @@ export const QuestionBankView: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingQuestion(null);
+    const initialSubject = filterSubject || taxonomy.subjects[0]?.id || '';
+    const initialChapters = initialSubject
+      ? taxonomy.chapters.filter((c) => c.subjectId === initialSubject)
+      : taxonomy.chapters;
+    const initialChapter = filterChapter || initialChapters[0]?.id || '';
+    const initialSubchapters = initialChapter
+      ? taxonomy.subchapters.filter((sc) => sc.chapterId === initialChapter)
+      : taxonomy.subchapters;
+    const initialSubchapter = filterSubchapter || initialSubchapters[0]?.id || '';
+    const initialCompetencies = initialSubchapter
+      ? taxonomy.competencies.filter((cmp) => cmp.subchapterId === initialSubchapter)
+      : taxonomy.competencies;
+    const initialCompetency = initialCompetencies[0]?.id || '';
+
     setFormData({
-      subjectId: taxonomy.subjects[0]?.id || '',
-      chapterId: taxonomy.chapters[0]?.id || '',
-      subchapterId: taxonomy.subchapters[0]?.id || '',
-      competencyId: taxonomy.competencies[0]?.id || '',
-      cognitiveLevel: 'MOTS',
+      subjectId: initialSubject,
+      chapterId: initialChapter,
+      subchapterId: initialSubchapter,
+      competencyId: initialCompetency,
+      cognitiveLevel: (filterCognitive as CognitiveLevel) || 'MOTS',
       type: 'pg',
       questionText: '',
       options: [
@@ -236,10 +253,37 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
     }
   };
 
+  // Cascading chapters and subchapters for filters
+  const availableChapters = filterSubject
+    ? taxonomy.chapters.filter((c) => c.subjectId === filterSubject)
+    : taxonomy.chapters;
+
+  const availableSubchapters = filterChapter
+    ? taxonomy.subchapters.filter((sc) => sc.chapterId === filterChapter)
+    : filterSubject
+    ? taxonomy.subchapters.filter((sc) => availableChapters.some((c) => c.id === sc.chapterId))
+    : taxonomy.subchapters;
+
+  // Cascading taxonomy for form modal
+  const formAvailableChapters = formData.subjectId
+    ? taxonomy.chapters.filter((c) => c.subjectId === formData.subjectId)
+    : taxonomy.chapters;
+
+  const formAvailableSubchapters = formData.chapterId
+    ? taxonomy.subchapters.filter((sc) => sc.chapterId === formData.chapterId)
+    : formData.subjectId
+    ? taxonomy.subchapters.filter((sc) => formAvailableChapters.some((c) => c.id === sc.chapterId))
+    : taxonomy.subchapters;
+
+  const formAvailableCompetencies = formData.subchapterId
+    ? taxonomy.competencies.filter((cmp) => cmp.subchapterId === formData.subchapterId)
+    : taxonomy.competencies;
+
   // Filter logic
   const filteredQuestions = questions.filter((q) => {
     if (filterSubject && q.subjectId !== filterSubject) return false;
     if (filterChapter && q.chapterId !== filterChapter) return false;
+    if (filterSubchapter && q.subchapterId !== filterSubchapter) return false;
     if (filterCognitive && q.cognitiveLevel !== filterCognitive) return false;
     if (filterType && q.type !== filterType) return false;
     if (filterStatus && q.status !== filterStatus) return false;
@@ -249,6 +293,25 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
     }
     return true;
   });
+
+  const isAnyFilterActive =
+    !!filterSubject ||
+    !!filterChapter ||
+    !!filterSubchapter ||
+    !!filterCognitive ||
+    !!filterType ||
+    !!filterStatus ||
+    !!searchQuery;
+
+  const handleResetFilters = () => {
+    setFilterSubject('');
+    setFilterChapter('');
+    setFilterSubchapter('');
+    setFilterCognitive('');
+    setFilterType('');
+    setFilterStatus('');
+    setSearchQuery('');
+  };
 
   return (
     <div className="space-y-6">
@@ -269,11 +332,18 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setShowDocxImportModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg shadow-xs transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Impor Template Word (.docx)</span>
+          </button>
+          <button
             onClick={() => setShowImportModal(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-xs transition-colors"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Impor Massal (Excel/CSV)</span>
+            <span>Impor Massal (CSV)</span>
           </button>
           <button
             onClick={handleOpenAdd}
@@ -285,26 +355,45 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
         </div>
       </div>
 
-      {/* Filter Toolbar */}
+      {/* Filter Toolbar (Search, Mapel, Bab, Sub-bab, Level Kognitif, Status) */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Search query */}
-          <div className="lg:col-span-2 relative">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Filter & Pencarian Bank Soal:</span>
+          </span>
+          {isAnyFilterActive && (
+            <button
+              onClick={handleResetFilters}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>Reset Semua Filter</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          {/* 1. Search Query */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari teks soal, rumus, atau konsep..."
+              placeholder="Cari teks soal / kata kunci..."
               className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
-          {/* Subject Filter */}
+          {/* 2. Subject Filter */}
           <div>
             <select
               value={filterSubject}
-              onChange={(e) => setFilterSubject(e.target.value)}
+              onChange={(e) => {
+                setFilterSubject(e.target.value);
+                setFilterChapter('');
+                setFilterSubchapter('');
+              }}
               className="w-full py-2 px-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               <option value="">Semua Mata Pelajaran</option>
@@ -316,7 +405,42 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
             </select>
           </div>
 
-          {/* Cognitive Level Filter */}
+          {/* 3. Chapter Filter (Bab) */}
+          <div>
+            <select
+              value={filterChapter}
+              onChange={(e) => {
+                setFilterChapter(e.target.value);
+                setFilterSubchapter('');
+              }}
+              className="w-full py-2 px-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="">Semua Bab</option>
+              {availableChapters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Subchapter Filter (Sub Bab) */}
+          <div>
+            <select
+              value={filterSubchapter}
+              onChange={(e) => setFilterSubchapter(e.target.value)}
+              className="w-full py-2 px-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            >
+              <option value="">Semua Sub Bab</option>
+              {availableSubchapters.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  {sc.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 5. Cognitive Level Filter */}
           <div>
             <select
               value={filterCognitive}
@@ -330,7 +454,7 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
             </select>
           </div>
 
-          {/* Status Filter */}
+          {/* 6. Status Filter */}
           <div>
             <select
               value={filterStatus}
@@ -338,7 +462,7 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
               className="w-full py-2 px-3 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               <option value="">Semua Status</option>
-              <option value="active">Aktif (Bisa Dipakai Ujian)</option>
+              <option value="active">Aktif</option>
               <option value="inactive">Nonaktif</option>
             </select>
           </div>
@@ -474,6 +598,7 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
             </div>
 
             <form onSubmit={handleSaveQuestion} className="space-y-4 mt-4">
+              {/* Row 1: Mata Pelajaran, Bab, Sub Bab */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Subject */}
                 <div>
@@ -482,13 +607,106 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
                   </label>
                   <select
                     value={formData.subjectId}
-                    onChange={(e) => setFormData({ ...formData, subjectId: e.target.value })}
+                    onChange={(e) => {
+                      const newSubj = e.target.value;
+                      const chs = taxonomy.chapters.filter((c) => c.subjectId === newSubj);
+                      const newCh = chs[0]?.id || '';
+                      const scs = newCh ? taxonomy.subchapters.filter((sc) => sc.chapterId === newCh) : [];
+                      const newSc = scs[0]?.id || '';
+                      const cmps = newSc ? taxonomy.competencies.filter((cmp) => cmp.subchapterId === newSc) : [];
+                      setFormData({
+                        ...formData,
+                        subjectId: newSubj,
+                        chapterId: newCh,
+                        subchapterId: newSc,
+                        competencyId: cmps[0]?.id || '',
+                      });
+                    }}
                     className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
                     required
                   >
                     {taxonomy.subjects.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Chapter (Bab) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Bab
+                  </label>
+                  <select
+                    value={formData.chapterId}
+                    onChange={(e) => {
+                      const newCh = e.target.value;
+                      const scs = taxonomy.subchapters.filter((sc) => sc.chapterId === newCh);
+                      const newSc = scs[0]?.id || '';
+                      const cmps = newSc ? taxonomy.competencies.filter((cmp) => cmp.subchapterId === newSc) : [];
+                      setFormData({
+                        ...formData,
+                        chapterId: newCh,
+                        subchapterId: newSc,
+                        competencyId: cmps[0]?.id || '',
+                      });
+                    }}
+                    className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">-- Pilih Bab --</option>
+                    {formAvailableChapters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Subchapter (Sub Bab) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Sub Bab
+                  </label>
+                  <select
+                    value={formData.subchapterId}
+                    onChange={(e) => {
+                      const newSc = e.target.value;
+                      const cmps = taxonomy.competencies.filter((cmp) => cmp.subchapterId === newSc);
+                      setFormData({
+                        ...formData,
+                        subchapterId: newSc,
+                        competencyId: cmps[0]?.id || '',
+                      });
+                    }}
+                    className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">-- Pilih Sub Bab --</option>
+                    {formAvailableSubchapters.map((sc) => (
+                      <option key={sc.id} value={sc.id}>
+                        {sc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 2: Indikator / Kompetensi, Level Kognitif, Tipe Soal */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Competency / Indikator */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Indikator / Kompetensi
+                  </label>
+                  <select
+                    value={formData.competencyId}
+                    onChange={(e) => setFormData({ ...formData, competencyId: e.target.value })}
+                    className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">-- Pilih Indikator --</option>
+                    {formAvailableCompetencies.map((cmp) => (
+                      <option key={cmp.id} value={cmp.id}>
+                        {cmp.code ? `${cmp.code}: ${cmp.description}` : cmp.description}
                       </option>
                     ))}
                   </select>
@@ -775,6 +993,21 @@ sbj-fisika,ch-termo,HOTS,pg_kompleks,"Pernyataan yang tepat mengenai efisiensi m
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bulk DOCX Word Template Import Modal */}
+      {showDocxImportModal && (
+        <DocxImportModal
+          isOpen={showDocxImportModal}
+          onClose={() => setShowDocxImportModal(false)}
+          subjects={taxonomy.subjects}
+          chapters={taxonomy.chapters}
+          subchapters={taxonomy.subchapters}
+          competencies={taxonomy.competencies}
+          defaultSubjectId={filterSubject}
+          defaultChapterId={filterChapter}
+          onSuccess={() => loadAll()}
+        />
       )}
     </div>
   );

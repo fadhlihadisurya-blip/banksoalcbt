@@ -47,9 +47,20 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // School Settings Collection (Nama Sekolah, Logo, Background Login)
+    match /settings/{docId} {
+      allow read, write: if true;
+    }
+
+    // Activity Logs Collection
+    match /activity_logs/{logId} {
+      allow read, write: if true;
+    }
+
     // Connection Test
     match /test/{docId} {
       allow read, write: if true;
     }
   }
 }
+

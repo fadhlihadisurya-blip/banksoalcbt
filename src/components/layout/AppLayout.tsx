@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 import {
   GraduationCap,
   LayoutDashboard,
@@ -16,17 +17,21 @@ import {
   Menu,
   X,
   UserCheck,
+  Layers,
+  Settings,
 } from 'lucide-react';
 
 export type NavTab =
   | 'dashboard'
   | 'bank'
+  | 'taxonomy'
   | 'exams'
   | 'monitoring'
   | 'results'
   | 'analytics'
   | 'classes'
-  | 'users';
+  | 'users'
+  | 'settings';
 
 interface AppLayoutProps {
   currentTab: NavTab;
@@ -40,6 +45,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
 }) => {
   const { user, logout, quickSwitch } = useAuth();
+  const { settings } = useSettings();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
@@ -52,8 +58,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         { id: 'classes' as NavTab, label: 'Manajemen Kelas', icon: School },
         { id: 'users' as NavTab, label: 'Manajemen Akun', icon: Users },
         { id: 'bank' as NavTab, label: 'Bank Soal Pusat', icon: Database },
+        { id: 'taxonomy' as NavTab, label: 'Taksonomi Soal', icon: Layers },
         { id: 'exams' as NavTab, label: 'Daftar Ujian', icon: FileQuestion },
         { id: 'monitoring' as NavTab, label: 'Monitoring Ujian', icon: Activity },
+        { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
       ];
     }
 
@@ -79,7 +87,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const getBreadcrumbTitle = () => {
     const item = navItems.find((n) => n.id === currentTab);
-    return item ? item.label : 'CBT SMA Pro';
+    return item ? item.label : settings.schoolName || 'CBT SMA Pro';
   };
 
   return (
@@ -96,15 +104,19 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </button>
 
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs">
-              <GraduationCap className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs overflow-hidden">
+              {settings.schoolLogoUrl ? (
+                <img src={settings.schoolLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <GraduationCap className="w-5 h-5" />
+              )}
             </div>
             <div>
-              <span className="text-base font-bold tracking-tight text-slate-900 block leading-tight">
-                SMAN 1 PRESTASI BANGSA
+              <span className="text-base font-bold tracking-tight text-slate-900 block leading-tight truncate max-w-[240px] sm:max-w-xs">
+                {settings.schoolName || 'SMAN 1 PRESTASI BANGSA'}
               </span>
               <span className="text-xs text-slate-500 font-medium">
-                CBT Portal · TP 2024/2025 Genap
+                {settings.appSubtitle || 'CBT Portal · TP 2024/2025 Genap'}
               </span>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 import {
   GraduationCap,
   ShieldCheck,
@@ -16,6 +17,7 @@ import {
 
 export const LoginView: React.FC = () => {
   const { login, loginAdminEmail } = useAuth();
+  const { settings } = useSettings();
 
   // Primary view mode: 'student' (Default: Siswa) | 'staff' (Admin & Guru)
   const [viewMode, setViewMode] = useState<'student' | 'staff'>('student');
@@ -120,20 +122,35 @@ export const LoginView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background Subtle Geometric Grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-40 pointer-events-none" />
+      {/* Background Image / Overlay */}
+      {settings.loginBackgroundUrl ? (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700 scale-105"
+            style={{ backgroundImage: `url(${settings.loginBackgroundUrl})` }}
+          />
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs" />
+        </>
+      ) : (
+        /* Background Subtle Geometric Grid */
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-40 pointer-events-none" />
+      )}
 
       {/* Header Brand */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center mb-3">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
-            <GraduationCap className="w-8 h-8" />
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-xl shadow-indigo-600/30 overflow-hidden">
+            {settings.schoolLogoUrl ? (
+              <img src={settings.schoolLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <GraduationCap className="w-9 h-9" />
+            )}
           </div>
         </div>
-        <h1 className="text-center text-2xl font-bold tracking-tight text-white">
-          CBT SMA PRESTASI BANGSA
+        <h1 className="text-center text-2xl font-bold tracking-tight text-white drop-shadow-md">
+          {settings.schoolName || 'CBT SMA PRESTASI BANGSA'}
         </h1>
-        <p className="mt-1 text-center text-sm text-slate-400">
+        <p className="mt-1 text-center text-sm text-slate-300 drop-shadow-xs font-medium">
           {viewMode === 'student' ? 'Portal Ujian Berbasis Komputer Siswa' : 'Portal Log In Guru & Administrator'}
         </p>
       </div>

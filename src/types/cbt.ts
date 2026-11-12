@@ -275,3 +275,12 @@ export interface AIClassicalAnalytics {
   };
   teacherActionPlan: string[];
 }
+
+export interface SchoolSettings {
+  schoolName: string;
+  schoolLogoUrl: string;
+  loginBackgroundUrl: string;
+  appSubtitle?: string;
+  academicYearText?: string;
+}
+

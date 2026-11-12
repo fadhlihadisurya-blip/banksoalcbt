@@ -47,6 +47,14 @@ async function loadFromFirestore() {
       db.exams = examsSnap.docs.map((d) => d.data());
     }
 
+    const settingsSnap = await getDocs(collection(firestoreDb, 'settings'));
+    if (!settingsSnap.empty) {
+      const sDoc = settingsSnap.docs.find((d) => d.id === 'school_info');
+      if (sDoc) {
+        db.settings = { ...db.settings, ...sDoc.data() };
+      }
+    }
+
     console.log('[Server Firestore Sync] Data sinkronisasi berhasil dimuat langsung dari Cloud Firestore.');
   } catch (err) {
     console.warn('[Server Firestore Load Warning]:', err);
@@ -54,40 +62,64 @@ async function loadFromFirestore() {
 }
 
 async function syncToFirestore() {
-  try {
-    if (!firestoreDb) return;
-    if (db.users && Array.isArray(db.users)) {
-      for (const u of db.users) {
-        if (u.id) {
+  if (!firestoreDb) return;
+  
+  if (db.users && Array.isArray(db.users)) {
+    for (const u of db.users) {
+      if (u.id) {
+        try {
           const copy = { ...u };
           delete copy.passwordHash;
           await setDoc(doc(firestoreDb, 'users', u.id), copy, { merge: true });
+        } catch (e) {
+          console.warn(`[Firestore Sync] Skipped user ${u.id}:`, e);
         }
       }
     }
-    if (db.classes && Array.isArray(db.classes)) {
-      for (const c of db.classes) {
-        if (c.id) {
+  }
+
+  if (db.classes && Array.isArray(db.classes)) {
+    for (const c of db.classes) {
+      if (c.id) {
+        try {
           await setDoc(doc(firestoreDb, 'classes', c.id), c, { merge: true });
+        } catch (e) {
+          console.warn(`[Firestore Sync] Skipped class ${c.id}:`, e);
         }
       }
     }
-    if (db.questions && Array.isArray(db.questions)) {
-      for (const q of db.questions) {
-        if (q.id) {
+  }
+
+  if (db.questions && Array.isArray(db.questions)) {
+    for (const q of db.questions) {
+      if (q.id) {
+        try {
           await setDoc(doc(firestoreDb, 'questions', q.id), q, { merge: true });
+        } catch (e) {
+          console.warn(`[Firestore Sync] Skipped question ${q.id}:`, e);
         }
       }
     }
-    if (db.exams && Array.isArray(db.exams)) {
-      for (const ex of db.exams) {
-        if (ex.id) {
+  }
+
+  if (db.exams && Array.isArray(db.exams)) {
+    for (const ex of db.exams) {
+      if (ex.id) {
+        try {
           await setDoc(doc(firestoreDb, 'exams', ex.id), ex, { merge: true });
+        } catch (e) {
+          console.warn(`[Firestore Sync] Skipped exam ${ex.id}:`, e);
         }
       }
     }
-  } catch (err) {
-    console.warn('[Server Firestore Sync Warning]:', err);
+  }
+
+  if (db.settings) {
+    try {
+      await setDoc(doc(firestoreDb, 'settings', 'school_info'), db.settings, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore Sync] Skipped settings:', e);
+    }
   }
 }
 
@@ -575,6 +607,14 @@ function generateInitialDatabase() {
   const examSessions: Record<string, any> = {};
   const examResults: Record<string, any> = {};
 
+  const settings = {
+    schoolName: 'SMAN 1 PRESTASI BANGSA',
+    schoolLogoUrl: '',
+    loginBackgroundUrl: '',
+    appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+    academicYearText: '2024/2025 Genap',
+  };
+
   return {
     users,
     academicYears,
@@ -588,6 +628,7 @@ function generateInitialDatabase() {
     examPackages,
     examSessions,
     examResults,
+    settings,
     activityLogs: [
       {
         id: 'log-1',
@@ -612,6 +653,15 @@ function loadDatabase() {
     try {
       const content = fs.readFileSync(DB_FILE, 'utf-8');
       db = JSON.parse(content);
+      if (!db.settings) {
+        db.settings = {
+          schoolName: 'SMAN 1 PRESTASI BANGSA',
+          schoolLogoUrl: '',
+          loginBackgroundUrl: '',
+          appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+          academicYearText: '2024/2025 Genap',
+        };
+      }
     } catch (err) {
       console.error('Error loading db file, regenerating fresh database:', err);
       db = generateInitialDatabase();
@@ -1031,23 +1081,205 @@ app.delete('/api/classes/:id', async (req, res) => {
   res.json({ success: true, message: 'Kelas berhasil dihapus dari sistem & Firestore.' });
 });
 
+// 1.5. School Settings Management
+app.get('/api/settings', (req, res) => {
+  if (!db.settings) {
+    db.settings = {
+      schoolName: 'SMAN 1 PRESTASI BANGSA',
+      schoolLogoUrl: '',
+      loginBackgroundUrl: '',
+      appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+      academicYearText: '2024/2025 Genap',
+    };
+  }
+  res.json({ settings: db.settings });
+});
+
+app.put('/api/settings', (req, res) => {
+  const { schoolName, schoolLogoUrl, loginBackgroundUrl, appSubtitle, academicYearText } = req.body;
+  if (!db.settings) {
+    db.settings = {
+      schoolName: 'SMAN 1 PRESTASI BANGSA',
+      schoolLogoUrl: '',
+      loginBackgroundUrl: '',
+      appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+      academicYearText: '2024/2025 Genap',
+    };
+  }
+
+  if (schoolName !== undefined) db.settings.schoolName = schoolName.trim();
+  if (schoolLogoUrl !== undefined) db.settings.schoolLogoUrl = schoolLogoUrl.trim();
+  if (loginBackgroundUrl !== undefined) db.settings.loginBackgroundUrl = loginBackgroundUrl.trim();
+  if (appSubtitle !== undefined) db.settings.appSubtitle = appSubtitle.trim();
+  if (academicYearText !== undefined) db.settings.academicYearText = academicYearText.trim();
+
+  saveDatabase();
+  res.json({ success: true, settings: db.settings, message: 'Pengaturan sekolah berhasil diperbarui.' });
+});
+
 // 2. Taxonomy & Curriculum
 app.get('/api/taxonomy', (req, res) => {
   res.json({
-    subjects: db.subjects,
-    chapters: db.chapters,
-    subchapters: db.subchapters,
-    competencies: db.competencies,
+    subjects: db.subjects || [],
+    chapters: db.chapters || [],
+    subchapters: db.subchapters || [],
+    competencies: db.competencies || [],
   });
 });
 
+// --- Subject CRUD ---
+app.post('/api/taxonomy/subject', (req, res) => {
+  const { name, code } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nama mata pelajaran wajib diisi.' });
+  const newSubject = {
+    id: `sbj-${Date.now()}`,
+    name: name.trim(),
+    code: (code || name.substring(0, 3).toUpperCase()).trim(),
+  };
+  db.subjects = db.subjects || [];
+  db.subjects.push(newSubject);
+  saveDatabase();
+  res.json({ success: true, subject: newSubject });
+});
+
+app.put('/api/taxonomy/subject/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, code } = req.body;
+  const item = (db.subjects || []).find((s: any) => s.id === id);
+  if (!item) return res.status(404).json({ error: 'Mata pelajaran tidak ditemukan.' });
+  if (name !== undefined) item.name = name.trim();
+  if (code !== undefined) item.code = code.trim();
+  saveDatabase();
+  res.json({ success: true, subject: item, message: 'Mata pelajaran berhasil diperbarui.' });
+});
+
+app.delete('/api/taxonomy/subject/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (db.subjects || []).findIndex((s: any) => s.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Mata pelajaran tidak ditemukan.' });
+
+  // Delete chapters, subchapters, competencies connected
+  const deletedChapters = (db.chapters || []).filter((c: any) => c.subjectId === id).map((c: any) => c.id);
+  const deletedSubchapters = (db.subchapters || []).filter((sc: any) => deletedChapters.includes(sc.chapterId)).map((sc: any) => sc.id);
+
+  db.subjects.splice(idx, 1);
+  db.chapters = (db.chapters || []).filter((c: any) => c.subjectId !== id);
+  db.subchapters = (db.subchapters || []).filter((sc: any) => !deletedChapters.includes(sc.chapterId));
+  db.competencies = (db.competencies || []).filter((cmp: any) => !deletedSubchapters.includes(cmp.subchapterId));
+
+  saveDatabase();
+  res.json({ success: true, message: 'Mata pelajaran dan taksonomi turunannya berhasil dihapus.' });
+});
+
+// --- Chapter CRUD ---
 app.post('/api/taxonomy/chapter', (req, res) => {
   const { subjectId, name } = req.body;
-  if (!subjectId || !name) return res.status(400).json({ error: 'Data tidak lengkap.' });
-  const chapter = { id: `ch-${Date.now()}`, subjectId, name };
+  if (!subjectId || !name) return res.status(400).json({ error: 'Mata pelajaran dan nama Bab wajib diisi.' });
+  const chapter = { id: `ch-${Date.now()}`, subjectId, name: name.trim() };
+  db.chapters = db.chapters || [];
   db.chapters.push(chapter);
   saveDatabase();
   res.json({ success: true, chapter });
+});
+
+app.put('/api/taxonomy/chapter/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, subjectId } = req.body;
+  const item = (db.chapters || []).find((c: any) => c.id === id);
+  if (!item) return res.status(404).json({ error: 'Bab tidak ditemukan.' });
+  if (name !== undefined) item.name = name.trim();
+  if (subjectId !== undefined) item.subjectId = subjectId;
+  saveDatabase();
+  res.json({ success: true, chapter: item, message: 'Bab berhasil diperbarui.' });
+});
+
+app.delete('/api/taxonomy/chapter/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (db.chapters || []).findIndex((c: any) => c.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Bab tidak ditemukan.' });
+
+  const deletedSubchapters = (db.subchapters || []).filter((sc: any) => sc.chapterId === id).map((sc: any) => sc.id);
+
+  db.chapters.splice(idx, 1);
+  db.subchapters = (db.subchapters || []).filter((sc: any) => sc.chapterId !== id);
+  db.competencies = (db.competencies || []).filter((cmp: any) => !deletedSubchapters.includes(cmp.subchapterId));
+
+  saveDatabase();
+  res.json({ success: true, message: 'Bab dan taksonomi turunannya berhasil dihapus.' });
+});
+
+// --- Subchapter CRUD ---
+app.post('/api/taxonomy/subchapter', (req, res) => {
+  const { chapterId, name } = req.body;
+  if (!chapterId || !name) return res.status(400).json({ error: 'Bab dan nama Sub Bab wajib diisi.' });
+  const subchapter = { id: `sub-${Date.now()}`, chapterId, name: name.trim() };
+  db.subchapters = db.subchapters || [];
+  db.subchapters.push(subchapter);
+  saveDatabase();
+  res.json({ success: true, subchapter });
+});
+
+app.put('/api/taxonomy/subchapter/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, chapterId } = req.body;
+  const item = (db.subchapters || []).find((sc: any) => sc.id === id);
+  if (!item) return res.status(404).json({ error: 'Sub Bab tidak ditemukan.' });
+  if (name !== undefined) item.name = name.trim();
+  if (chapterId !== undefined) item.chapterId = chapterId;
+  saveDatabase();
+  res.json({ success: true, subchapter: item, message: 'Sub Bab berhasil diperbarui.' });
+});
+
+app.delete('/api/taxonomy/subchapter/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (db.subchapters || []).findIndex((sc: any) => sc.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Sub Bab tidak ditemukan.' });
+
+  db.subchapters.splice(idx, 1);
+  db.competencies = (db.competencies || []).filter((cmp: any) => cmp.subchapterId !== id);
+
+  saveDatabase();
+  res.json({ success: true, message: 'Sub Bab dan indikator turunannya berhasil dihapus.' });
+});
+
+// --- Competency CRUD ---
+app.post('/api/taxonomy/competency', (req, res) => {
+  const { subchapterId, code, description } = req.body;
+  if (!subchapterId || !code || !description) {
+    return res.status(400).json({ error: 'Sub Bab, Kode KD, dan Deskripsi Kompetensi wajib diisi.' });
+  }
+  const competency = {
+    id: `cmp-${Date.now()}`,
+    subchapterId,
+    code: code.trim(),
+    description: description.trim(),
+  };
+  db.competencies = db.competencies || [];
+  db.competencies.push(competency);
+  saveDatabase();
+  res.json({ success: true, competency });
+});
+
+app.put('/api/taxonomy/competency/:id', (req, res) => {
+  const { id } = req.params;
+  const { code, description, subchapterId } = req.body;
+  const item = (db.competencies || []).find((cmp: any) => cmp.id === id);
+  if (!item) return res.status(404).json({ error: 'Kompetensi / Indikator tidak ditemukan.' });
+  if (code !== undefined) item.code = code.trim();
+  if (description !== undefined) item.description = description.trim();
+  if (subchapterId !== undefined) item.subchapterId = subchapterId;
+  saveDatabase();
+  res.json({ success: true, competency: item, message: 'Kompetensi / Indikator berhasil diperbarui.' });
+});
+
+app.delete('/api/taxonomy/competency/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = (db.competencies || []).findIndex((cmp: any) => cmp.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Kompetensi / Indikator tidak ditemukan.' });
+
+  db.competencies.splice(idx, 1);
+  saveDatabase();
+  res.json({ success: true, message: 'Indikator / Kompetensi berhasil dihapus.' });
 });
 
 // 3. Question Bank Management

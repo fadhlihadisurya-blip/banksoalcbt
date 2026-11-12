@@ -15,6 +15,7 @@ import {
   ExamResultItem,
   AIIndividualAnalytics,
   AIClassicalAnalytics,
+  SchoolSettings,
 } from '../types/cbt';
 import { clientStore } from './clientStore';
 
@@ -64,6 +65,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  // Settings
+  getSettings: () => request<{ settings: SchoolSettings }>('/settings'),
+
+  updateSettings: (settingsData: Partial<SchoolSettings>) =>
+    request<{ success: boolean; settings: SchoolSettings; message: string }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settingsData),
+    }),
+
   // Auth
   login: (username: string, password: string) =>
     request<{ success: boolean; user: User }>('/auth/login', {
@@ -135,7 +145,7 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // Taxonomy
+  // Taxonomy CRUD
   getTaxonomy: () =>
     request<{
       subjects: Subject[];
@@ -144,10 +154,76 @@ export const api = {
       competencies: Competency[];
     }>('/taxonomy'),
 
+  // Subjects
+  createSubject: (subjectData: { name: string; code?: string }) =>
+    request<{ success: boolean; subject: Subject }>('/taxonomy/subject', {
+      method: 'POST',
+      body: JSON.stringify(subjectData),
+    }),
+
+  updateSubject: (id: string, subjectData: { name?: string; code?: string }) =>
+    request<{ success: boolean; subject: Subject; message: string }>(`/taxonomy/subject/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(subjectData),
+    }),
+
+  deleteSubject: (id: string) =>
+    request<{ success: boolean; message: string }>(`/taxonomy/subject/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Chapters
   createChapter: (subjectId: string, name: string) =>
     request<{ success: boolean; chapter: Chapter }>('/taxonomy/chapter', {
       method: 'POST',
       body: JSON.stringify({ subjectId, name }),
+    }),
+
+  updateChapter: (id: string, chapterData: { name?: string; subjectId?: string }) =>
+    request<{ success: boolean; chapter: Chapter; message: string }>(`/taxonomy/chapter/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(chapterData),
+    }),
+
+  deleteChapter: (id: string) =>
+    request<{ success: boolean; message: string }>(`/taxonomy/chapter/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Subchapters
+  createSubchapter: (chapterId: string, name: string) =>
+    request<{ success: boolean; subchapter: Subchapter }>('/taxonomy/subchapter', {
+      method: 'POST',
+      body: JSON.stringify({ chapterId, name }),
+    }),
+
+  updateSubchapter: (id: string, subchapterData: { name?: string; chapterId?: string }) =>
+    request<{ success: boolean; subchapter: Subchapter; message: string }>(`/taxonomy/subchapter/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(subchapterData),
+    }),
+
+  deleteSubchapter: (id: string) =>
+    request<{ success: boolean; message: string }>(`/taxonomy/subchapter/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Competencies
+  createCompetency: (competencyData: { subchapterId: string; code: string; description: string }) =>
+    request<{ success: boolean; competency: Competency }>('/taxonomy/competency', {
+      method: 'POST',
+      body: JSON.stringify(competencyData),
+    }),
+
+  updateCompetency: (id: string, competencyData: Partial<Competency>) =>
+    request<{ success: boolean; competency: Competency; message: string }>(`/taxonomy/competency/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(competencyData),
+    }),
+
+  deleteCompetency: (id: string) =>
+    request<{ success: boolean; message: string }>(`/taxonomy/competency/${id}`, {
+      method: 'DELETE',
     }),
 
   // Questions

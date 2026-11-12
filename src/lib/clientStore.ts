@@ -514,6 +514,142 @@ export const clientStore = {
       }
     }
 
+    // Settings: /settings
+    if (endpoint === '/settings') {
+      if (!dbLocal.settings) {
+        dbLocal.settings = {
+          schoolName: 'SMAN 1 PRESTASI BANGSA',
+          schoolLogoUrl: '',
+          loginBackgroundUrl: '',
+          appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+          academicYearText: '2024/2025 Genap',
+        };
+      }
+
+      if (method === 'GET') {
+        return { settings: dbLocal.settings } as T;
+      }
+      if (method === 'PUT') {
+        const { schoolName, schoolLogoUrl, loginBackgroundUrl, appSubtitle, academicYearText } = body;
+        if (schoolName !== undefined) dbLocal.settings.schoolName = schoolName.trim();
+        if (schoolLogoUrl !== undefined) dbLocal.settings.schoolLogoUrl = schoolLogoUrl.trim();
+        if (loginBackgroundUrl !== undefined) dbLocal.settings.loginBackgroundUrl = loginBackgroundUrl.trim();
+        if (appSubtitle !== undefined) dbLocal.settings.appSubtitle = appSubtitle.trim();
+        if (academicYearText !== undefined) dbLocal.settings.academicYearText = academicYearText.trim();
+        saveStoredDb(dbLocal);
+        return { success: true, settings: dbLocal.settings, message: 'Pengaturan berhasil diperbarui.' } as T;
+      }
+    }
+
+    // Taxonomy Mutations Fallback
+    if (endpoint.startsWith('/taxonomy/')) {
+      const parts = endpoint.split('/');
+      const entity = parts[2]; // subject | chapter | subchapter | competency
+      const id = parts[3];
+
+      if (entity === 'subject') {
+        if (method === 'POST') {
+          const item = { id: `sbj-${Date.now()}`, name: (body.name || '').trim(), code: (body.code || '').trim() };
+          dbLocal.subjects = dbLocal.subjects || [];
+          dbLocal.subjects.push(item);
+          saveStoredDb(dbLocal);
+          return { success: true, subject: item } as T;
+        }
+        if (method === 'PUT' && id) {
+          const item = (dbLocal.subjects || []).find((s: any) => s.id === id);
+          if (item) {
+            if (body.name !== undefined) item.name = body.name.trim();
+            if (body.code !== undefined) item.code = body.code.trim();
+            saveStoredDb(dbLocal);
+          }
+          return { success: true, subject: item, message: 'Berhasil diperbarui' } as T;
+        }
+        if (method === 'DELETE' && id) {
+          dbLocal.subjects = (dbLocal.subjects || []).filter((s: any) => s.id !== id);
+          saveStoredDb(dbLocal);
+          return { success: true, message: 'Berhasil dihapus' } as T;
+        }
+      }
+
+      if (entity === 'chapter') {
+        if (method === 'POST') {
+          const item = { id: `ch-${Date.now()}`, subjectId: body.subjectId, name: (body.name || '').trim() };
+          dbLocal.chapters = dbLocal.chapters || [];
+          dbLocal.chapters.push(item);
+          saveStoredDb(dbLocal);
+          return { success: true, chapter: item } as T;
+        }
+        if (method === 'PUT' && id) {
+          const item = (dbLocal.chapters || []).find((c: any) => c.id === id);
+          if (item) {
+            if (body.name !== undefined) item.name = body.name.trim();
+            if (body.subjectId !== undefined) item.subjectId = body.subjectId;
+            saveStoredDb(dbLocal);
+          }
+          return { success: true, chapter: item, message: 'Berhasil diperbarui' } as T;
+        }
+        if (method === 'DELETE' && id) {
+          dbLocal.chapters = (dbLocal.chapters || []).filter((c: any) => c.id !== id);
+          saveStoredDb(dbLocal);
+          return { success: true, message: 'Berhasil dihapus' } as T;
+        }
+      }
+
+      if (entity === 'subchapter') {
+        if (method === 'POST') {
+          const item = { id: `sub-${Date.now()}`, chapterId: body.chapterId, name: (body.name || '').trim() };
+          dbLocal.subchapters = dbLocal.subchapters || [];
+          dbLocal.subchapters.push(item);
+          saveStoredDb(dbLocal);
+          return { success: true, subchapter: item } as T;
+        }
+        if (method === 'PUT' && id) {
+          const item = (dbLocal.subchapters || []).find((sc: any) => sc.id === id);
+          if (item) {
+            if (body.name !== undefined) item.name = body.name.trim();
+            if (body.chapterId !== undefined) item.chapterId = body.chapterId;
+            saveStoredDb(dbLocal);
+          }
+          return { success: true, subchapter: item, message: 'Berhasil diperbarui' } as T;
+        }
+        if (method === 'DELETE' && id) {
+          dbLocal.subchapters = (dbLocal.subchapters || []).filter((sc: any) => sc.id !== id);
+          saveStoredDb(dbLocal);
+          return { success: true, message: 'Berhasil dihapus' } as T;
+        }
+      }
+
+      if (entity === 'competency') {
+        if (method === 'POST') {
+          const item = {
+            id: `cmp-${Date.now()}`,
+            subchapterId: body.subchapterId,
+            code: (body.code || '').trim(),
+            description: (body.description || '').trim(),
+          };
+          dbLocal.competencies = dbLocal.competencies || [];
+          dbLocal.competencies.push(item);
+          saveStoredDb(dbLocal);
+          return { success: true, competency: item } as T;
+        }
+        if (method === 'PUT' && id) {
+          const item = (dbLocal.competencies || []).find((cmp: any) => cmp.id === id);
+          if (item) {
+            if (body.code !== undefined) item.code = body.code.trim();
+            if (body.description !== undefined) item.description = body.description.trim();
+            if (body.subchapterId !== undefined) item.subchapterId = body.subchapterId;
+            saveStoredDb(dbLocal);
+          }
+          return { success: true, competency: item, message: 'Berhasil diperbarui' } as T;
+        }
+        if (method === 'DELETE' && id) {
+          dbLocal.competencies = (dbLocal.competencies || []).filter((cmp: any) => cmp.id !== id);
+          saveStoredDb(dbLocal);
+          return { success: true, message: 'Berhasil dihapus' } as T;
+        }
+      }
+    }
+
     return {} as T;
   },
 };
