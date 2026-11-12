@@ -5,8 +5,53 @@ import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import firebaseConfig from './firebase-applet-config.json';
 
 dotenv.config();
+
+const firebaseApp = initializeApp(firebaseConfig);
+const firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+
+async function syncToFirestore() {
+  try {
+    if (!firestoreDb) return;
+    if (db.users && Array.isArray(db.users)) {
+      for (const u of db.users) {
+        if (u.id) {
+          const copy = { ...u };
+          delete copy.passwordHash;
+          await setDoc(doc(firestoreDb, 'users', u.id), copy, { merge: true });
+        }
+      }
+    }
+    if (db.classes && Array.isArray(db.classes)) {
+      for (const c of db.classes) {
+        if (c.id) {
+          await setDoc(doc(firestoreDb, 'classes', c.id), c, { merge: true });
+        }
+      }
+    }
+    if (db.questions && Array.isArray(db.questions)) {
+      for (const q of db.questions) {
+        if (q.id) {
+          await setDoc(doc(firestoreDb, 'questions', q.id), q, { merge: true });
+        }
+      }
+    }
+    if (db.exams && Array.isArray(db.exams)) {
+      for (const ex of db.exams) {
+        if (ex.id) {
+          await setDoc(doc(firestoreDb, 'exams', ex.id), ex, { merge: true });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Server Firestore Sync Warning]:', err);
+  }
+}
+
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -539,6 +584,7 @@ function loadDatabase() {
 function saveDatabase() {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+    syncToFirestore().catch(() => {});
   } catch (err) {
     console.error('Error saving database:', err);
   }

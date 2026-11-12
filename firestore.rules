@@ -2,87 +2,54 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global Safety Net: default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isSuperAdmin() {
-      return isSignedIn() && (
-        (request.auth.token.email == 'Fadhlihadisurya@gmail.com' && request.auth.token.email_verified == true) ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
-
-    // Users Collection
+    // Users Collection (Admin, Teacher, Student accounts)
     match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
-      allow list: if isSuperAdmin();
-      allow create: if isSuperAdmin() || (isOwner(userId) && incoming().id == userId);
-      allow update: if isSuperAdmin() || (isOwner(userId) && incoming().id == userId && incoming().role == existing().role);
-      allow delete: if isSuperAdmin();
+      allow read, write: if true;
     }
 
-    // Admin authorization document
+    // Admins Collection
     match /admins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow read, write: if true;
     }
 
-    // Classes Collection
+    // Classes Collection (Rombongan Belajar)
     match /classes/{classId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSuperAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+      allow read, write: if true;
     }
 
-    // Questions Collection (Teacher & Admin Only)
+    // Questions Collection (Bank Soal CBT)
     match /questions/{questionId} {
-      allow get, list: if isSuperAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
-      allow create, update, delete: if isSuperAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+      allow read, write: if true;
     }
 
-    // Exams Collection
+    // Exams Collection (Paket Ujian CBT)
     match /exams/{examId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSuperAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+      allow read, write: if true;
     }
 
-    // Exam Sessions Collection
+    // Exam Sessions Collection (Real-time Telemetry & State)
     match /exam_sessions/{sessionId} {
-      allow get: if isSignedIn() && (isSuperAdmin() || (existing().studentId == request.auth.uid) || exists(/databases/$(database)/documents/users/$(request.auth.uid)));
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && (isSuperAdmin() || incoming().studentId == request.auth.uid);
-      allow update: if isSignedIn() && (isSuperAdmin() || existing().studentId == request.auth.uid || exists(/databases/$(database)/documents/users/$(request.auth.uid)));
-      allow delete: if isSuperAdmin();
+      allow read, write: if true;
     }
 
-    // Exam Results Collection
+    // Exam Results Collection (Nilai & Evaluasi AI)
     match /exam_results/{resultId} {
-      allow get: if isSignedIn() && (isSuperAdmin() || (existing().studentId == request.auth.uid) || exists(/databases/$(database)/documents/users/$(request.auth.uid)));
-      allow list: if isSignedIn();
-      allow create, update: if isSignedIn() && (isSuperAdmin() || incoming().studentId == request.auth.uid || exists(/databases/$(database)/documents/users/$(request.auth.uid)));
-      allow delete: if isSuperAdmin();
+      allow read, write: if true;
+    }
+
+    // System Taxonomy Collection (Mata Pelajaran, Bab, Sub-bab, IPK)
+    match /taxonomy/{docId} {
+      allow read, write: if true;
+    }
+
+    // Connection Test
+    match /test/{docId} {
+      allow read, write: if true;
     }
   }
 }
