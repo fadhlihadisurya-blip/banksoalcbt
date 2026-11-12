@@ -331,10 +331,16 @@ export const clientStore = {
     // 3. Auth Login: /auth/login
     if (endpoint === '/auth/login' && method === 'POST') {
       const { username } = body;
+      const cleanUser = (username || '').toLowerCase();
       try {
         const fsUsers = await firestoreStore.getUsers();
-        if (fsUsers && fsUsers.users) {
-          const match = fsUsers.users.find((u: any) => u.username.toLowerCase() === (username || '').toLowerCase());
+        if (fsUsers && fsUsers.users && fsUsers.users.length > 0) {
+          let match = fsUsers.users.find((u: any) => u.username.toLowerCase() === cleanUser);
+          if (!match) {
+            if (cleanUser === 'admin') match = fsUsers.users.find((u: any) => u.role === 'admin');
+            else if (cleanUser === 'guru' || cleanUser === 'teacher') match = fsUsers.users.find((u: any) => u.role === 'teacher');
+            else if (cleanUser.startsWith('siswa') || cleanUser === 'student') match = fsUsers.users.find((u: any) => u.role === 'student');
+          }
           if (match) {
             return { success: true, user: match } as T;
           }
@@ -343,7 +349,13 @@ export const clientStore = {
         console.warn('[Firestore] Login lookup fallback:', e);
       }
 
-      const user = (dbLocal.users || []).find((u: any) => u.username.toLowerCase() === (username || '').toLowerCase());
+      let user = (dbLocal.users || []).find((u: any) => u.username.toLowerCase() === cleanUser);
+      if (!user) {
+        if (cleanUser === 'admin') user = (dbLocal.users || []).find((u: any) => u.role === 'admin');
+        else if (cleanUser === 'guru' || cleanUser === 'teacher') user = (dbLocal.users || []).find((u: any) => u.role === 'teacher');
+        else if (cleanUser.startsWith('siswa') || cleanUser === 'student') user = (dbLocal.users || []).find((u: any) => u.role === 'student');
+      }
+
       if (user) {
         user.lastLogin = new Date().toISOString();
         saveStoredDb(dbLocal);
@@ -351,6 +363,27 @@ export const clientStore = {
         delete safe.passwordHash;
         return { success: true, user: safe } as T;
       }
+
+      // Default mock profile fallback for demo role switches
+      if (cleanUser === 'admin') {
+        return {
+          success: true,
+          user: { id: 'usr-admin-1', username: 'admin', name: 'Drs. Hendro Wibowo, M.Pd.', role: 'admin', email: 'admin@sman1prestasi.sch.id', isActive: true },
+        } as unknown as T;
+      }
+      if (cleanUser === 'guru' || cleanUser === 'teacher') {
+        return {
+          success: true,
+          user: { id: 'usr-teacher-1', username: 'guru', name: 'Ahmad Fauzi, S.Pd., M.Si.', role: 'teacher', email: 'ahmad.fauzi@sman1prestasi.sch.id', isActive: true },
+        } as unknown as T;
+      }
+      if (cleanUser.startsWith('siswa') || cleanUser === 'student') {
+        return {
+          success: true,
+          user: { id: 'usr-student-1', username: 'siswa', name: 'Siswa Demo CBT', role: 'student', nis: '20241001', classId: 'cls-xii-mipa-1', isActive: true },
+        } as unknown as T;
+      }
+
       throw new Error('Username atau password salah.');
     }
 

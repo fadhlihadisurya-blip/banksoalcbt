@@ -447,11 +447,10 @@ export const UserManagementView: React.FC = () => {
                           {/* Tombol Edit: Tersedia untuk semua akun termasuk Admin */}
                           <button
                             onClick={() => handleOpenEditModal(u)}
-                            className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
                             title="Edit Akun"
                           >
-                            <Pencil className="w-3 h-3" />
-                            <span>Edit</span>
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Tombol Reset Password */}
@@ -461,22 +460,20 @@ export const UserManagementView: React.FC = () => {
                               setNewPasswordInput('');
                               setShowResetModal(true);
                             }}
-                            className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            className="p-1.5 text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
                             title="Reset Password"
                           >
-                            <KeyRound className="w-3 h-3" />
-                            <span>Reset</span>
+                            <KeyRound className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Tombol Hapus: Ditampilkan hanya untuk Siswa dan Guru (Admin tidak ada tombol hapus) */}
                           {u.role !== 'admin' && (
                             <button
                               onClick={() => handleOpenDeleteModal(u)}
-                              className="px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                              className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded transition-colors inline-flex items-center justify-center shadow-2xs cursor-pointer"
                               title="Hapus Akun"
                             >
-                              <Trash2 className="w-3 h-3" />
-                              <span>Hapus</span>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>

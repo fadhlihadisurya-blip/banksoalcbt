@@ -6,13 +6,52 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 
 dotenv.config();
 
 const firebaseApp = initializeApp(firebaseConfig);
 const firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+
+async function loadFromFirestore() {
+  try {
+    if (!firestoreDb) return;
+    const usersSnap = await getDocs(collection(firestoreDb, 'users'));
+    if (!usersSnap.empty) {
+      const fsUsers = usersSnap.docs.map((d) => d.data());
+      const userMap = new Map();
+      for (const u of db.users || []) userMap.set(u.id, u);
+      for (const fsu of fsUsers) {
+        const existing = userMap.get(fsu.id);
+        userMap.set(fsu.id, {
+          ...fsu,
+          passwordHash: existing?.passwordHash || fsu.passwordHash || hashPassword('siswa123'),
+        });
+      }
+      db.users = Array.from(userMap.values());
+    }
+
+    const classesSnap = await getDocs(collection(firestoreDb, 'classes'));
+    if (!classesSnap.empty) {
+      db.classes = classesSnap.docs.map((d) => d.data());
+    }
+
+    const questionsSnap = await getDocs(collection(firestoreDb, 'questions'));
+    if (!questionsSnap.empty) {
+      db.questions = questionsSnap.docs.map((d) => d.data());
+    }
+
+    const examsSnap = await getDocs(collection(firestoreDb, 'exams'));
+    if (!examsSnap.empty) {
+      db.exams = examsSnap.docs.map((d) => d.data());
+    }
+
+    console.log('[Server Firestore Sync] Data sinkronisasi berhasil dimuat langsung dari Cloud Firestore.');
+  } catch (err) {
+    console.warn('[Server Firestore Load Warning]:', err);
+  }
+}
 
 async function syncToFirestore() {
   try {
@@ -591,6 +630,7 @@ function saveDatabase() {
 }
 
 loadDatabase();
+loadFromFirestore().catch((err) => console.warn('[Server Firestore] Initial load skipped:', err));
 
 // -------------------------------------------------------------
 // HELPER: Randomization Algorithm
@@ -704,7 +744,7 @@ app.post('/api/auth/login', (req, res) => {
   const cleanPassword = String(password).trim();
   const hash = hashPassword(cleanPassword);
 
-  const user = db.users.find((u: any) => {
+  let user = db.users.find((u: any) => {
     if (u.username.toLowerCase() !== cleanUsername) return false;
     // Check direct hash match
     if (u.passwordHash === hash) return true;
@@ -717,6 +757,17 @@ app.post('/api/auth/login', (req, res) => {
     if (cleanUsername.startsWith('siswa') && (cleanPassword === 'siswa123' || cleanPassword === 'siswa')) return true;
     return false;
   });
+
+  // If specific demo account was deleted or modified, fall back to any active user matching role or prefix
+  if (!user) {
+    if (cleanUsername === 'admin') {
+      user = db.users.find((u: any) => u.role === 'admin' && u.isActive !== false);
+    } else if (cleanUsername === 'guru' || cleanUsername === 'teacher') {
+      user = db.users.find((u: any) => u.role === 'teacher' && u.isActive !== false);
+    } else if (cleanUsername.startsWith('siswa') || cleanUsername === 'student') {
+      user = db.users.find((u: any) => u.role === 'student' && u.isActive !== false);
+    }
+  }
 
   if (!user) {
     return res.status(401).json({ error: 'Username atau password salah.' });
@@ -845,7 +896,7 @@ app.put('/api/admin/users/:id', (req, res) => {
   res.json({ success: true, user: safe, message: 'Data akun berhasil diperbarui.' });
 });
 
-app.delete('/api/admin/users/:id', (req, res) => {
+app.delete('/api/admin/users/:id', async (req, res) => {
   const { id } = req.params;
   const user = db.users.find((u: any) => u.id === id);
   if (!user) return res.status(404).json({ error: 'User tidak ditemukan.' });
@@ -855,8 +906,15 @@ app.delete('/api/admin/users/:id', (req, res) => {
   }
 
   db.users = db.users.filter((u: any) => u.id !== id);
+  try {
+    if (firestoreDb) {
+      await deleteDoc(doc(firestoreDb, 'users', id));
+    }
+  } catch (err) {
+    console.warn('[Firestore] Delete user doc warning:', err);
+  }
   saveDatabase();
-  res.json({ success: true, message: 'Akun berhasil dihapus.' });
+  res.json({ success: true, message: 'Akun berhasil dihapus dari Manajemen Akun & Firestore.' });
 });
 
 app.post('/api/admin/users/reset-password', (req, res) => {
@@ -949,7 +1007,7 @@ app.put('/api/classes/:id', (req, res) => {
   res.json({ success: true, class: cls, message: 'Data kelas berhasil diperbarui.' });
 });
 
-app.delete('/api/classes/:id', (req, res) => {
+app.delete('/api/classes/:id', async (req, res) => {
   const { id } = req.params;
   const clsIndex = db.classes.findIndex((c: any) => c.id === id);
   if (clsIndex === -1) return res.status(404).json({ error: 'Kelas tidak ditemukan.' });
@@ -962,8 +1020,15 @@ app.delete('/api/classes/:id', (req, res) => {
   });
 
   db.classes.splice(clsIndex, 1);
+  try {
+    if (firestoreDb) {
+      await deleteDoc(doc(firestoreDb, 'classes', id));
+    }
+  } catch (err) {
+    console.warn('[Firestore] Delete class doc warning:', err);
+  }
   saveDatabase();
-  res.json({ success: true, message: 'Kelas berhasil dihapus.' });
+  res.json({ success: true, message: 'Kelas berhasil dihapus dari sistem & Firestore.' });
 });
 
 // 2. Taxonomy & Curriculum
