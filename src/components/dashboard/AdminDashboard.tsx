@@ -222,8 +222,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 <span className="font-medium text-emerald-600">Firebase Firestore (Terhubung)</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Autentikasi</span>
-                <span className="font-medium text-emerald-600">Firebase Auth + Google Sign-In</span>
+                <span className="text-slate-500">Autentikasi Admin</span>
+                <span className="font-medium text-emerald-600">Firebase Provider (Email/Password)</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100">
                 <span className="text-slate-500">Kunci Jawaban</span>

@@ -1,0 +1,1065 @@
+{
+  "users": [
+    {
+      "id": "usr-admin-1",
+      "username": "admin",
+      "passwordHash": "c8b398e3dcca41148e2c0731cb743cc3661d5a94f1242affec2fed015b1db580",
+      "name": "Drs. Hendro Wibowo, M.Pd.",
+      "role": "admin",
+      "email": "admin@sman1prestasi.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "lastLogin": "2026-11-12T05:20:38.167Z"
+    },
+    {
+      "id": "usr-teacher-1",
+      "username": "guru",
+      "passwordHash": "a69e4e0141d9286544d60f4213011250bd0e5eba48b73776a86d234a33c59486",
+      "name": "Ahmad Fauzi, S.Pd., M.Si.",
+      "role": "teacher",
+      "email": "ahmad.fauzi@sman1prestasi.sch.id",
+      "nip": "198403152009021004",
+      "subjectSpecialty": "Fisika & Matematika IPA",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "lastLogin": "2026-11-12T05:20:40.186Z"
+    },
+    {
+      "id": "usr-teacher-2",
+      "username": "gurubio",
+      "passwordHash": "a69e4e0141d9286544d60f4213011250bd0e5eba48b73776a86d234a33c59486",
+      "name": "Dra. Sri Wahyuni, M.Biotech",
+      "role": "teacher",
+      "email": "sri.wahyuni@sman1prestasi.sch.id",
+      "nip": "197908122005012003",
+      "subjectSpecialty": "Biologi SMA",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z"
+    },
+    {
+      "id": "usr-student-1",
+      "username": "siswa1",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "name": "Ahmad Rifai",
+      "role": "student",
+      "nis": "20241001",
+      "nisn": "0061234501",
+      "classId": "cls-xii-mipa-1",
+      "gender": "L",
+      "email": "rifai.ahmad@siswa.sman1.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "lastLogin": "2026-11-12T05:20:46.386Z"
+    },
+    {
+      "id": "usr-student-2",
+      "username": "siswa2",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "name": "Siti Nur Aisyah",
+      "role": "student",
+      "nis": "20241002",
+      "nisn": "0061234502",
+      "classId": "cls-xii-mipa-1",
+      "gender": "P",
+      "email": "siti.aisyah@siswa.sman1.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z"
+    },
+    {
+      "id": "usr-student-3",
+      "username": "siswa3",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "name": "Bintang Pratama",
+      "role": "student",
+      "nis": "20241003",
+      "nisn": "0061234503",
+      "classId": "cls-xii-mipa-1",
+      "gender": "L",
+      "email": "bintang.pratama@siswa.sman1.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z"
+    },
+    {
+      "id": "usr-student-4",
+      "username": "siswa4",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "name": "Nabila Zahra",
+      "role": "student",
+      "nis": "20241004",
+      "nisn": "0061234504",
+      "classId": "cls-xii-mipa-1",
+      "gender": "P",
+      "email": "nabila.zahra@siswa.sman1.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z"
+    },
+    {
+      "id": "usr-student-5",
+      "username": "siswa5",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "name": "Dimas Arya Putra",
+      "role": "student",
+      "nis": "20241005",
+      "nisn": "0061234505",
+      "classId": "cls-xii-mipa-2",
+      "gender": "L",
+      "email": "dimas.arya@siswa.sman1.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z"
+    },
+    {
+      "id": "usr-student-6",
+      "username": "siswa6",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "name": "Farhan Maulana",
+      "role": "student",
+      "nis": "20241006",
+      "nisn": "0061234506",
+      "classId": "cls-xii-mipa-2",
+      "gender": "L",
+      "email": "farhan.m@siswa.sman1.sch.id",
+      "isActive": true,
+      "createdAt": "2026-11-12T04:10:00.719Z"
+    }
+  ],
+  "academicYears": [
+    {
+      "id": "ay-2024-genap",
+      "name": "2024/2025",
+      "semester": "Genap",
+      "isActive": true
+    },
+    {
+      "id": "ay-2024-ganjil",
+      "name": "2024/2025",
+      "semester": "Ganjil",
+      "isActive": false
+    }
+  ],
+  "classes": [
+    {
+      "id": "cls-x-1",
+      "gradeLevel": "X",
+      "name": "X-1 (Fase E)",
+      "academicYearId": "ay-2024-genap",
+      "homeroomTeacher": "Siti Rahma, S.Pd."
+    },
+    {
+      "id": "cls-xi-f1",
+      "gradeLevel": "XI",
+      "name": "XI-F1 (Fase F MIPA)",
+      "academicYearId": "ay-2024-genap",
+      "homeroomTeacher": "Bambang Sudibyo, M.Pd."
+    },
+    {
+      "id": "cls-xii-mipa-1",
+      "gradeLevel": "XII",
+      "name": "XII MIPA 1",
+      "academicYearId": "ay-2024-genap",
+      "homeroomTeacher": "Ahmad Fauzi, S.Pd., M.Si."
+    },
+    {
+      "id": "cls-xii-mipa-2",
+      "gradeLevel": "XII",
+      "name": "XII MIPA 2",
+      "academicYearId": "ay-2024-genap",
+      "homeroomTeacher": "Dra. Sri Wahyuni, M.Biotech"
+    },
+    {
+      "id": "cls-xii-ips-1",
+      "gradeLevel": "XII",
+      "name": "XII IPS 1",
+      "academicYearId": "ay-2024-genap",
+      "homeroomTeacher": "Drs. H. Mulyadi"
+    }
+  ],
+  "subjects": [
+    {
+      "id": "sbj-fisika",
+      "name": "Fisika",
+      "code": "FIS-SMA-XII"
+    },
+    {
+      "id": "sbj-biologi",
+      "name": "Biologi",
+      "code": "BIO-SMA-XII"
+    },
+    {
+      "id": "sbj-matematika",
+      "name": "Matematika Peminatan",
+      "code": "MAT-SMA-XII"
+    },
+    {
+      "id": "sbj-kimia",
+      "name": "Kimia",
+      "code": "KIM-SMA-XII"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "ch-termo",
+      "subjectId": "sbj-fisika",
+      "name": "Termodinamika dan Hukum Gas Ideal"
+    },
+    {
+      "id": "ch-gelombang",
+      "subjectId": "sbj-fisika",
+      "name": "Gelombang Mekanik & Bunyi"
+    },
+    {
+      "id": "ch-genetika",
+      "subjectId": "sbj-biologi",
+      "name": "Hukum Mendel dan Pola Hereditas"
+    },
+    {
+      "id": "ch-kalkulus",
+      "subjectId": "sbj-matematika",
+      "name": "Turunan dan Integral Fungsi Trigonometri"
+    }
+  ],
+  "subchapters": [
+    {
+      "id": "sub-hukum1-termo",
+      "chapterId": "ch-termo",
+      "name": "Hukum I Termodinamika & Usaha Gas"
+    },
+    {
+      "id": "sub-siklus-carnot",
+      "chapterId": "ch-termo",
+      "name": "Siklus Carnot dan Efisiensi Mesin Kalor"
+    },
+    {
+      "id": "sub-entropi",
+      "chapterId": "ch-termo",
+      "name": "Entropi dan Hukum II Termodinamika"
+    },
+    {
+      "id": "sub-efek-doppler",
+      "chapterId": "ch-gelombang",
+      "name": "Efek Doppler dan Intensitas Bunyi"
+    },
+    {
+      "id": "sub-persilangan-dihibrid",
+      "chapterId": "ch-genetika",
+      "name": "Persilangan Monohibrid dan Dihibrid"
+    },
+    {
+      "id": "sub-turunan-trigo",
+      "chapterId": "ch-kalkulus",
+      "name": "Turunan Pertama dan Nilai Ekstrim Trigonometri"
+    }
+  ],
+  "competencies": [
+    {
+      "id": "cmp-3.6.1",
+      "subchapterId": "sub-hukum1-termo",
+      "code": "KD 3.6.1",
+      "description": "Menghitung usaha yang dilakukan gas pada proses isobarik, isotermik, dan isokhorik"
+    },
+    {
+      "id": "cmp-3.6.2",
+      "subchapterId": "sub-siklus-carnot",
+      "code": "KD 3.6.2",
+      "description": "Menganalisis prinsip kerja mesin Carnot dan menghitung efisiensi termal maksimum"
+    },
+    {
+      "id": "cmp-3.6.3",
+      "subchapterId": "sub-entropi",
+      "code": "KD 3.6.3",
+      "description": "Mengevaluasi perubahan entropi sistem tertutup dan kelayakan proses termodinamika"
+    },
+    {
+      "id": "cmp-3.8.1",
+      "subchapterId": "sub-efek-doppler",
+      "code": "KD 3.8.1",
+      "description": "Menganalisis pergeseran frekuensi bunyi akibat gerak relatif sumber dan pendengar"
+    },
+    {
+      "id": "cmp-3.5.1",
+      "subchapterId": "sub-persilangan-dihibrid",
+      "code": "KD 3.5.1",
+      "description": "Menentukan rasio fenotip dan genotip F2 pada persilangan dihibrid dominan penuh"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-fis-01",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-hukum1-termo",
+      "competencyId": "cmp-3.6.1",
+      "cognitiveLevel": "LOTS",
+      "type": "pg",
+      "questionText": "Pada proses termodinamika di mana volume sistem gas dijaga konstan (isokhorik), berapakah besar usaha (W) yang dilakukan oleh gas?",
+      "options": [
+        {
+          "id": "A",
+          "text": "W = P · ΔV"
+        },
+        {
+          "id": "B",
+          "text": "W = 0"
+        },
+        {
+          "id": "C",
+          "text": "W = n · R · T · ln(V2/V1)"
+        },
+        {
+          "id": "D",
+          "text": "W = Q - ΔU"
+        },
+        {
+          "id": "E",
+          "text": "W = Tak hingga"
+        }
+      ],
+      "correctAnswer": "B",
+      "points": 10,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-02",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-hukum1-termo",
+      "competencyId": "cmp-3.6.1",
+      "cognitiveLevel": "MOTS",
+      "type": "pg",
+      "questionText": "Suatu gas ideal berada dalam ruang tertutup bertekanan tetap 2 × 10⁵ Pa. Jika gas dipanaskan sehingga memuai dari volume 1,5 m³ menjadi 2,5 m³, besar usaha yang dilakukan gas adalah ...",
+      "options": [
+        {
+          "id": "A",
+          "text": "1,0 × 10⁵ Joule"
+        },
+        {
+          "id": "B",
+          "text": "2,0 × 10⁵ Joule"
+        },
+        {
+          "id": "C",
+          "text": "3,0 × 10⁵ Joule"
+        },
+        {
+          "id": "D",
+          "text": "4,0 × 10⁵ Joule"
+        },
+        {
+          "id": "E",
+          "text": "5,0 × 10⁵ Joule"
+        }
+      ],
+      "correctAnswer": "B",
+      "points": 10,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-03",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-siklus-carnot",
+      "competencyId": "cmp-3.6.2",
+      "cognitiveLevel": "HOTS",
+      "type": "pg_kompleks",
+      "questionText": "Sebuah mesin pendingin Carnot beroperasi di antara tandon suhu tinggi T₁ = 300 K dan tandon suhu rendah T₂ = 240 K. Manakah pernyataan berikut yang BENAR terkait mesin tersebut? (Pilih semua yang sesuai)",
+      "options": [
+        {
+          "id": "A",
+          "text": "Koefisien performansi (COP) mesin tersebut bernilai 4"
+        },
+        {
+          "id": "B",
+          "text": "Jika suhu tandon rendah diturunkan menjadi 200 K, nilai COP akan meningkat"
+        },
+        {
+          "id": "C",
+          "text": "Efisiensi termal mesin Carnot teoritis maksimum yang bekerja pada rentang suhu tersebut adalah 20%"
+        },
+        {
+          "id": "D",
+          "text": "Mesin pendingin tersebut melanggar Hukum II Termodinamika karena memindahkan kalor ke tandon suhu tinggi"
+        }
+      ],
+      "correctAnswer": [
+        "A",
+        "C"
+      ],
+      "points": 15,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-04",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-entropi",
+      "competencyId": "cmp-3.6.3",
+      "cognitiveLevel": "HOTS",
+      "type": "benar_salah",
+      "questionText": "Tentukan kebenaran dari pernyataan termodinamika berikut berdasarkan Hukum II Termodinamika:\n\n\"Pada proses adiabatik ireversibel dalam sistem terisolasi, total entropi alam semesta selalu meningkat (ΔS > 0).\"",
+      "options": [
+        {
+          "id": "true",
+          "text": "BENAR"
+        },
+        {
+          "id": "false",
+          "text": "SALAH"
+        }
+      ],
+      "correctAnswer": "true",
+      "points": 10,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-05",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-siklus-carnot",
+      "competencyId": "cmp-3.6.2",
+      "cognitiveLevel": "MOTS",
+      "type": "pg",
+      "questionText": "Suatu mesin kalor Carnot menyerap kalor sebesar 800 J dari tandon suhu tinggi 600 K dan membuang sebagian kalor ke tandon suhu rendah 300 K. Berapakah usaha yang dihasilkan oleh mesin dalam satu siklus?",
+      "options": [
+        {
+          "id": "A",
+          "text": "200 Joule"
+        },
+        {
+          "id": "B",
+          "text": "300 Joule"
+        },
+        {
+          "id": "C",
+          "text": "400 Joule"
+        },
+        {
+          "id": "D",
+          "text": "500 Joule"
+        },
+        {
+          "id": "E",
+          "text": "600 Joule"
+        }
+      ],
+      "correctAnswer": "C",
+      "points": 10,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-06",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-gelombang",
+      "subchapterId": "sub-efek-doppler",
+      "competencyId": "cmp-3.8.1",
+      "cognitiveLevel": "LOTS",
+      "type": "pg",
+      "questionText": "Peristiwa perubahan frekuensi bunyi yang terdengar oleh pengamat akibat gerak relatif antara sumber bunyi dan pengamat dikenal sebagai fenomena ...",
+      "options": [
+        {
+          "id": "A",
+          "text": "Difraksi Gelombang"
+        },
+        {
+          "id": "B",
+          "text": "Interferensi Konstruktif"
+        },
+        {
+          "id": "C",
+          "text": "Efek Doppler"
+        },
+        {
+          "id": "D",
+          "text": "Polarisasi Bunyi"
+        },
+        {
+          "id": "E",
+          "text": "Dispersi Akustik"
+        }
+      ],
+      "correctAnswer": "C",
+      "points": 10,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-07",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-gelombang",
+      "subchapterId": "sub-efek-doppler",
+      "competencyId": "cmp-3.8.1",
+      "cognitiveLevel": "MOTS",
+      "type": "pg",
+      "questionText": "Sebuah mobil ambulans bergerak dengan kelajuan 20 m/s membunyikan sirine berfrekuensi 640 Hz mendekati seorang siswa yang diam di halte. Jika cepat rambat bunyi di udara 340 m/s, frekuensi sirine yang didengar oleh siswa adalah ...",
+      "options": [
+        {
+          "id": "A",
+          "text": "600 Hz"
+        },
+        {
+          "id": "B",
+          "text": "640 Hz"
+        },
+        {
+          "id": "C",
+          "text": "680 Hz"
+        },
+        {
+          "id": "D",
+          "text": "720 Hz"
+        },
+        {
+          "id": "E",
+          "text": "760 Hz"
+        }
+      ],
+      "correctAnswer": "C",
+      "points": 10,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-fis-08",
+      "subjectId": "sbj-fisika",
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-siklus-carnot",
+      "competencyId": "cmp-3.6.2",
+      "cognitiveLevel": "HOTS",
+      "type": "esai",
+      "questionText": "Sebuah pabrik pembangkit listrik tenaga uap (PLTU) berencana meningkatkan efisiensi turbin uapnya dari 35% menjadi 45%. Jelaskan minimal 2 strategi termodinamika realistis berdasarkan konsep Siklus Rankine/Carnot beserta konsekuensi teknis dan keselamatan sistemnya.",
+      "rubric": "Kriteria penilaian: 1. Penjelasan kenaikan suhu boiler / penurunan suhu kondensor (40%), 2. Analisis termal efisiensi (30%), 3. Konsekuensi teknis material tahan tekanan tinggi/korosi (30%).",
+      "correctAnswer": "Menaikkan temperatur uap masuk turbin (T1) dan menurunkan temperatur kondensor (T2) menggunakan pendingin air dan menara pendingin efisien, dengan memperhatikan batasan metalurgi turbin.",
+      "points": 20,
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd."
+    },
+    {
+      "id": "q-bio-01",
+      "subjectId": "sbj-biologi",
+      "chapterId": "ch-genetika",
+      "subchapterId": "sub-persilangan-dihibrid",
+      "competencyId": "cmp-3.5.1",
+      "cognitiveLevel": "LOTS",
+      "type": "pg",
+      "questionText": "Pada persilangan monohibrid tanaman kacang ercis berbiji bulat (BB) dengan berbiji kisut (bb), jika sifat bulat dominan penuh terhadap kisut, maka fenotip keturunan F1 seluruhnya adalah ...",
+      "options": [
+        {
+          "id": "A",
+          "text": "100% Berbiji Bulat"
+        },
+        {
+          "id": "B",
+          "text": "100% Berbiji Kisut"
+        },
+        {
+          "id": "C",
+          "text": "50% Bulat, 50% Kisut"
+        },
+        {
+          "id": "D",
+          "text": "75% Bulat, 25% Kisut"
+        },
+        {
+          "id": "E",
+          "text": "25% Bulat, 75% Kisut"
+        }
+      ],
+      "correctAnswer": "A",
+      "points": 10,
+      "status": "active",
+      "author": "Dra. Sri Wahyuni"
+    },
+    {
+      "id": "q-bio-02",
+      "subjectId": "sbj-biologi",
+      "chapterId": "ch-genetika",
+      "subchapterId": "sub-persilangan-dihibrid",
+      "competencyId": "cmp-3.5.1",
+      "cognitiveLevel": "MOTS",
+      "type": "pg",
+      "questionText": "Pada persilangan dihibrid antara tanaman ercis berbiji bulat warna kuning heterozigot (BbKk) dengan sesamanya, peluang diperolehnya tanaman berbiji keriput warna hijau (bbkk) pada F2 adalah ...",
+      "options": [
+        {
+          "id": "A",
+          "text": "9/16"
+        },
+        {
+          "id": "B",
+          "text": "3/16"
+        },
+        {
+          "id": "C",
+          "text": "1/16"
+        },
+        {
+          "id": "D",
+          "text": "1/4"
+        },
+        {
+          "id": "E",
+          "text": "1/8"
+        }
+      ],
+      "correctAnswer": "C",
+      "points": 10,
+      "status": "active",
+      "author": "Dra. Sri Wahyuni"
+    },
+    {
+      "id": "q-bio-03",
+      "subjectId": "sbj-biologi",
+      "chapterId": "ch-genetika",
+      "subchapterId": "sub-persilangan-dihibrid",
+      "competencyId": "cmp-3.5.1",
+      "cognitiveLevel": "HOTS",
+      "type": "pg_kompleks",
+      "questionText": "Suatu eksperimen pemuliaan tanaman padi menghasilkan data keturunan F2 yang menyimpang dari rasio Mendel 9:3:3:1 menjadi 9:7. Manakah penjelasan biologis yang paling tepat mengenai fenomena ini? (Pilih semua jawaban benar)",
+      "options": [
+        {
+          "id": "A",
+          "text": "Terjadi peristiwa interaksi antargen berupa komplementer"
+        },
+        {
+          "id": "B",
+          "text": "Kedua gen dominan harus hadir bersama-sama agar sifat fenotip muncul"
+        },
+        {
+          "id": "C",
+          "text": "Terjadi mutasi gen tunggal secara acak pada generasi F1"
+        },
+        {
+          "id": "D",
+          "text": "Gen resesif homozigot pada salah satu lokus menghambat ekspresi fenotip"
+        }
+      ],
+      "correctAnswer": [
+        "A",
+        "B",
+        "D"
+      ],
+      "points": 15,
+      "status": "active",
+      "author": "Dra. Sri Wahyuni"
+    }
+  ],
+  "exams": [
+    {
+      "id": "ex-fisika-xii-01",
+      "title": "Sumatif Akhir Semester: Fisika Terapan XII MIPA",
+      "subjectId": "sbj-fisika",
+      "academicYearId": "ay-2024-genap",
+      "semester": "Genap",
+      "targetClassIds": [
+        "cls-xii-mipa-1",
+        "cls-xii-mipa-2"
+      ],
+      "scheduleStart": "2026-11-12T03:10:00.720Z",
+      "scheduleEnd": "2026-11-13T04:10:00.720Z",
+      "durationMinutes": 90,
+      "maxScore": 100,
+      "kktpScore": 75,
+      "selectedChapterIds": [
+        "ch-termo",
+        "ch-gelombang"
+      ],
+      "selectedSubchapterIds": [
+        "sub-hukum1-termo",
+        "sub-siklus-carnot",
+        "sub-entropi",
+        "sub-efek-doppler"
+      ],
+      "selectedCompetencyIds": [
+        "cmp-3.6.1",
+        "cmp-3.6.2",
+        "cmp-3.6.3",
+        "cmp-3.8.1"
+      ],
+      "cognitiveTarget": {
+        "lotsCount": 2,
+        "motsCount": 3,
+        "hotsCount": 2,
+        "totalQuestions": 7
+      },
+      "token": "SMA7X9",
+      "tokenAutoRotate": true,
+      "tokenIntervalMinutes": 15,
+      "tokenUpdatedAt": "2026-11-12T04:10:00.720Z",
+      "isTokenActive": true,
+      "antiCheating": {
+        "forceFullscreen": true,
+        "detectTabSwitch": true,
+        "blockRightClick": true,
+        "blockCopyPaste": true,
+        "maxToleranceViolations": 3,
+        "autoSubmitOnViolationLimit": false
+      },
+      "status": "active",
+      "isPublishedResults": true,
+      "createdTeacherId": "usr-teacher-1",
+      "createdAt": "2026-11-12T04:10:00.720Z"
+    }
+  ],
+  "examPackages": {
+    "ex-fisika-xii-01_usr-student-2": {
+      "examId": "ex-fisika-xii-01",
+      "studentId": "usr-student-2",
+      "createdAt": "2026-11-12T04:10:00.722Z",
+      "totalQuestions": 7,
+      "questions": [
+        {
+          "number": 1,
+          "id": "q-fis-03",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-termo",
+          "subchapterId": "sub-siklus-carnot",
+          "competencyId": "cmp-3.6.2",
+          "cognitiveLevel": "HOTS",
+          "type": "pg_kompleks",
+          "questionText": "Sebuah mesin pendingin Carnot beroperasi di antara tandon suhu tinggi T₁ = 300 K dan tandon suhu rendah T₂ = 240 K. Manakah pernyataan berikut yang BENAR terkait mesin tersebut? (Pilih semua yang sesuai)",
+          "options": [
+            {
+              "id": "C",
+              "text": "Efisiensi termal mesin Carnot teoritis maksimum yang bekerja pada rentang suhu tersebut adalah 20%"
+            },
+            {
+              "id": "D",
+              "text": "Mesin pendingin tersebut melanggar Hukum II Termodinamika karena memindahkan kalor ke tandon suhu tinggi"
+            },
+            {
+              "id": "B",
+              "text": "Jika suhu tandon rendah diturunkan menjadi 200 K, nilai COP akan meningkat"
+            },
+            {
+              "id": "A",
+              "text": "Koefisien performansi (COP) mesin tersebut bernilai 4"
+            }
+          ],
+          "points": 15
+        },
+        {
+          "number": 2,
+          "id": "q-fis-07",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-gelombang",
+          "subchapterId": "sub-efek-doppler",
+          "competencyId": "cmp-3.8.1",
+          "cognitiveLevel": "MOTS",
+          "type": "pg",
+          "questionText": "Sebuah mobil ambulans bergerak dengan kelajuan 20 m/s membunyikan sirine berfrekuensi 640 Hz mendekati seorang siswa yang diam di halte. Jika cepat rambat bunyi di udara 340 m/s, frekuensi sirine yang didengar oleh siswa adalah ...",
+          "options": [
+            {
+              "id": "B",
+              "text": "640 Hz"
+            },
+            {
+              "id": "E",
+              "text": "760 Hz"
+            },
+            {
+              "id": "C",
+              "text": "680 Hz"
+            },
+            {
+              "id": "D",
+              "text": "720 Hz"
+            },
+            {
+              "id": "A",
+              "text": "600 Hz"
+            }
+          ],
+          "points": 10
+        },
+        {
+          "number": 3,
+          "id": "q-fis-01",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-termo",
+          "subchapterId": "sub-hukum1-termo",
+          "competencyId": "cmp-3.6.1",
+          "cognitiveLevel": "LOTS",
+          "type": "pg",
+          "questionText": "Pada proses termodinamika di mana volume sistem gas dijaga konstan (isokhorik), berapakah besar usaha (W) yang dilakukan oleh gas?",
+          "options": [
+            {
+              "id": "A",
+              "text": "W = P · ΔV"
+            },
+            {
+              "id": "B",
+              "text": "W = 0"
+            },
+            {
+              "id": "E",
+              "text": "W = Tak hingga"
+            },
+            {
+              "id": "D",
+              "text": "W = Q - ΔU"
+            },
+            {
+              "id": "C",
+              "text": "W = n · R · T · ln(V2/V1)"
+            }
+          ],
+          "points": 10
+        },
+        {
+          "number": 4,
+          "id": "q-fis-02",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-termo",
+          "subchapterId": "sub-hukum1-termo",
+          "competencyId": "cmp-3.6.1",
+          "cognitiveLevel": "MOTS",
+          "type": "pg",
+          "questionText": "Suatu gas ideal berada dalam ruang tertutup bertekanan tetap 2 × 10⁵ Pa. Jika gas dipanaskan sehingga memuai dari volume 1,5 m³ menjadi 2,5 m³, besar usaha yang dilakukan gas adalah ...",
+          "options": [
+            {
+              "id": "D",
+              "text": "4,0 × 10⁵ Joule"
+            },
+            {
+              "id": "A",
+              "text": "1,0 × 10⁵ Joule"
+            },
+            {
+              "id": "B",
+              "text": "2,0 × 10⁵ Joule"
+            },
+            {
+              "id": "E",
+              "text": "5,0 × 10⁵ Joule"
+            },
+            {
+              "id": "C",
+              "text": "3,0 × 10⁵ Joule"
+            }
+          ],
+          "points": 10
+        },
+        {
+          "number": 5,
+          "id": "q-fis-08",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-termo",
+          "subchapterId": "sub-siklus-carnot",
+          "competencyId": "cmp-3.6.2",
+          "cognitiveLevel": "HOTS",
+          "type": "esai",
+          "questionText": "Sebuah pabrik pembangkit listrik tenaga uap (PLTU) berencana meningkatkan efisiensi turbin uapnya dari 35% menjadi 45%. Jelaskan minimal 2 strategi termodinamika realistis berdasarkan konsep Siklus Rankine/Carnot beserta konsekuensi teknis dan keselamatan sistemnya.",
+          "points": 20
+        },
+        {
+          "number": 6,
+          "id": "q-fis-05",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-termo",
+          "subchapterId": "sub-siklus-carnot",
+          "competencyId": "cmp-3.6.2",
+          "cognitiveLevel": "MOTS",
+          "type": "pg",
+          "questionText": "Suatu mesin kalor Carnot menyerap kalor sebesar 800 J dari tandon suhu tinggi 600 K dan membuang sebagian kalor ke tandon suhu rendah 300 K. Berapakah usaha yang dihasilkan oleh mesin dalam satu siklus?",
+          "options": [
+            {
+              "id": "D",
+              "text": "500 Joule"
+            },
+            {
+              "id": "C",
+              "text": "400 Joule"
+            },
+            {
+              "id": "A",
+              "text": "200 Joule"
+            },
+            {
+              "id": "B",
+              "text": "300 Joule"
+            },
+            {
+              "id": "E",
+              "text": "600 Joule"
+            }
+          ],
+          "points": 10
+        },
+        {
+          "number": 7,
+          "id": "q-fis-06",
+          "subjectId": "sbj-fisika",
+          "chapterId": "ch-gelombang",
+          "subchapterId": "sub-efek-doppler",
+          "competencyId": "cmp-3.8.1",
+          "cognitiveLevel": "LOTS",
+          "type": "pg",
+          "questionText": "Peristiwa perubahan frekuensi bunyi yang terdengar oleh pengamat akibat gerak relatif antara sumber bunyi dan pengamat dikenal sebagai fenomena ...",
+          "options": [
+            {
+              "id": "D",
+              "text": "Polarisasi Bunyi"
+            },
+            {
+              "id": "A",
+              "text": "Difraksi Gelombang"
+            },
+            {
+              "id": "C",
+              "text": "Efek Doppler"
+            },
+            {
+              "id": "E",
+              "text": "Dispersi Akustik"
+            },
+            {
+              "id": "B",
+              "text": "Interferensi Konstruktif"
+            }
+          ],
+          "points": 10
+        }
+      ]
+    }
+  },
+  "examSessions": {
+    "ex-fisika-xii-01_usr-student-2": {
+      "id": "ex-fisika-xii-01_usr-student-2",
+      "examId": "ex-fisika-xii-01",
+      "studentId": "usr-student-2",
+      "studentName": "Siti Nur Aisyah",
+      "studentNis": "20241002",
+      "className": "XII MIPA 1",
+      "status": "completed",
+      "startedAt": "2026-11-12T03:10:00.723Z",
+      "completedAt": "2026-11-12T04:00:00.723Z",
+      "remainingSeconds": 0,
+      "currentQuestionIndex": 6,
+      "answers": {
+        "q-fis-01": "B",
+        "q-fis-02": "B",
+        "q-fis-03": [
+          "A",
+          "C"
+        ],
+        "q-fis-04": "true",
+        "q-fis-05": "C",
+        "q-fis-06": "C",
+        "q-fis-07": "A"
+      },
+      "violationCount": 0,
+      "violations": [],
+      "lastHeartbeat": "2026-11-12T04:10:00.723Z"
+    }
+  },
+  "examResults": {
+    "ex-fisika-xii-01_usr-student-2": {
+      "id": "res-usr-student-2",
+      "examId": "ex-fisika-xii-01",
+      "studentId": "usr-student-2",
+      "studentName": "Siti Nur Aisyah",
+      "studentNis": "20241002",
+      "className": "XII MIPA 1",
+      "completedAt": "2026-11-12T04:00:00.723Z",
+      "finalScore": 88,
+      "isPassed": true,
+      "kktpScore": 75,
+      "correctCount": 6,
+      "wrongCount": 1,
+      "emptyCount": 0,
+      "totalQuestions": 7,
+      "breakdownByCognitive": {
+        "LOTS": {
+          "total": 2,
+          "correct": 2
+        },
+        "MOTS": {
+          "total": 3,
+          "correct": 2
+        },
+        "HOTS": {
+          "total": 2,
+          "correct": 2
+        }
+      },
+      "questionDetails": [
+        {
+          "questionId": "q-fis-01",
+          "number": 1,
+          "cognitiveLevel": "LOTS",
+          "subchapterId": "sub-hukum1-termo",
+          "isCorrect": true,
+          "scoreEarned": 10,
+          "maxPoints": 10
+        },
+        {
+          "questionId": "q-fis-02",
+          "number": 2,
+          "cognitiveLevel": "MOTS",
+          "subchapterId": "sub-hukum1-termo",
+          "isCorrect": true,
+          "scoreEarned": 10,
+          "maxPoints": 10
+        },
+        {
+          "questionId": "q-fis-03",
+          "number": 3,
+          "cognitiveLevel": "HOTS",
+          "subchapterId": "sub-siklus-carnot",
+          "isCorrect": true,
+          "scoreEarned": 15,
+          "maxPoints": 15
+        },
+        {
+          "questionId": "q-fis-04",
+          "number": 4,
+          "cognitiveLevel": "HOTS",
+          "subchapterId": "sub-entropi",
+          "isCorrect": true,
+          "scoreEarned": 10,
+          "maxPoints": 10
+        },
+        {
+          "questionId": "q-fis-05",
+          "number": 5,
+          "cognitiveLevel": "MOTS",
+          "subchapterId": "sub-siklus-carnot",
+          "isCorrect": true,
+          "scoreEarned": 10,
+          "maxPoints": 10
+        },
+        {
+          "questionId": "q-fis-06",
+          "number": 6,
+          "cognitiveLevel": "LOTS",
+          "subchapterId": "sub-efek-doppler",
+          "isCorrect": true,
+          "scoreEarned": 10,
+          "maxPoints": 10
+        },
+        {
+          "questionId": "q-fis-07",
+          "number": 7,
+          "cognitiveLevel": "MOTS",
+          "subchapterId": "sub-efek-doppler",
+          "isCorrect": false,
+          "scoreEarned": 0,
+          "maxPoints": 10
+        }
+      ],
+      "violationsRecorded": []
+    }
+  },
+  "activityLogs": [
+    {
+      "id": "log-1",
+      "timestamp": "2026-11-12T03:40:00.720Z",
+      "actorName": "Ahmad Fauzi, S.Pd.",
+      "role": "teacher",
+      "action": "CREATE_EXAM",
+      "details": "Membuat Ujian Sumatif Fisika XII MIPA (Token: SMA7X9)"
+    }
+  ]
+}

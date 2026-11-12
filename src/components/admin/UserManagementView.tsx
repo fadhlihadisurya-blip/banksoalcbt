@@ -14,6 +14,9 @@ import {
   Download,
   X,
   FileSpreadsheet,
+  Pencil,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const UserManagementView: React.FC = () => {
@@ -31,6 +34,26 @@ export const UserManagementView: React.FC = () => {
   const [showResetModal, setShowResetModal] = useState(false);
   const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
+
+  // Edit User State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<User | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editRole, setEditRole] = useState<'student' | 'teacher' | 'admin'>('student');
+  const [editEmail, setEditEmail] = useState('');
+  const [editNis, setEditNis] = useState('');
+  const [editClassId, setEditClassId] = useState('');
+  const [editNip, setEditNip] = useState('');
+  const [editSubjectSpecialty, setEditSubjectSpecialty] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Delete User State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedUserForDelete, setSelectedUserForDelete] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // New User Form
   const [newUsername, setNewUsername] = useState('');
@@ -108,6 +131,81 @@ export const UserManagementView: React.FC = () => {
       alert(`Password untuk ${selectedUserForReset.username} berhasil direset.`);
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleOpenEditModal = (u: User) => {
+    setSelectedUserForEdit(u);
+    setEditName(u.name || '');
+    setEditUsername(u.username || '');
+    setEditRole(u.role);
+    setEditEmail(u.email || '');
+    setEditNis(u.nis || '');
+    setEditClassId(u.classId || (classes[0]?.id || ''));
+    setEditNip(u.nip || '');
+    setEditSubjectSpecialty(u.subjectSpecialty || '');
+    setEditPassword('');
+    setEditIsActive(u.isActive !== false);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForEdit) return;
+
+    if (!editName.trim() || !editUsername.trim()) {
+      alert('Nama lengkap dan username wajib diisi.');
+      return;
+    }
+
+    try {
+      setIsSavingEdit(true);
+      await api.updateUser(selectedUserForEdit.id, {
+        name: editName.trim(),
+        username: editUsername.trim(),
+        role: editRole,
+        email: editEmail.trim(),
+        isActive: editIsActive,
+        nis: editRole === 'student' ? (editNis.trim() || editUsername.trim()) : undefined,
+        classId: editRole === 'student' ? editClassId : undefined,
+        nip: editRole === 'teacher' ? editNip.trim() : undefined,
+        subjectSpecialty: editRole === 'teacher' ? editSubjectSpecialty.trim() : undefined,
+        password: editPassword.trim() ? editPassword.trim() : undefined,
+      });
+
+      setShowEditModal(false);
+      setSelectedUserForEdit(null);
+      await loadAll();
+      alert('Data akun berhasil diperbarui.');
+    } catch (err: any) {
+      alert(err.message || 'Gagal memperbarui data akun.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleOpenDeleteModal = (u: User) => {
+    if (u.role === 'admin') {
+      alert('Akun Administrator tidak dapat dihapus demi keamanan sistem.');
+      return;
+    }
+    setSelectedUserForDelete(u);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedUserForDelete) return;
+    try {
+      setIsDeleting(true);
+      await api.deleteUser(selectedUserForDelete.id);
+      setShowDeleteModal(false);
+      setSelectedUserForDelete(null);
+      await loadAll();
+      alert('Akun berhasil dihapus.');
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus akun.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -308,17 +406,43 @@ export const UserManagementView: React.FC = () => {
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedUserForReset(u);
-                            setNewPasswordInput('');
-                            setShowResetModal(true);
-                          }}
-                          className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors inline-flex items-center gap-1"
-                        >
-                          <KeyRound className="w-3 h-3" />
-                          <span>Reset Password</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Tombol Edit: Tersedia untuk semua akun termasuk Admin */}
+                          <button
+                            onClick={() => handleOpenEditModal(u)}
+                            className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="Edit Akun"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          {/* Tombol Reset Password */}
+                          <button
+                            onClick={() => {
+                              setSelectedUserForReset(u);
+                              setNewPasswordInput('');
+                              setShowResetModal(true);
+                            }}
+                            className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="Reset Password"
+                          >
+                            <KeyRound className="w-3 h-3" />
+                            <span>Reset</span>
+                          </button>
+
+                          {/* Tombol Hapus: Ditampilkan hanya untuk Siswa dan Guru (Admin tidak ada tombol hapus) */}
+                          {u.role !== 'admin' && (
+                            <button
+                              onClick={() => handleOpenDeleteModal(u)}
+                              className="px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded transition-colors inline-flex items-center gap-1 shadow-2xs"
+                              title="Hapus Akun"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Hapus</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -531,6 +655,228 @@ export const UserManagementView: React.FC = () => {
                 className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs disabled:opacity-50"
               >
                 Impor Siswa Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUserForEdit && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">Edit Akun Pengguna</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setSelectedUserForEdit(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3 mt-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Peran (Role)</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  disabled={selectedUserForEdit.role === 'admin'}
+                >
+                  <option value="student">Siswa</option>
+                  <option value="teacher">Guru</option>
+                  <option value="admin">Administrator</option>
+                </select>
+                {selectedUserForEdit.role === 'admin' && (
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Peran Administrator sistem terkunci untuk keamanan akun.
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Email (Opsional)</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="nama@email.com"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {editRole === 'student' && (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Nomor Induk Siswa (NIS)</label>
+                    <input
+                      type="text"
+                      value={editNis}
+                      onChange={(e) => setEditNis(e.target.value)}
+                      placeholder="Contoh: 20241020"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Alokasi Kelas</label>
+                    <select
+                      value={editClassId}
+                      onChange={(e) => setEditClassId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {editRole === 'teacher' && (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">NIP (Opsional)</label>
+                    <input
+                      type="text"
+                      value={editNip}
+                      onChange={(e) => setEditNip(e.target.value)}
+                      placeholder="Contoh: 198003152005011002"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Spesialisasi Mata Pelajaran</label>
+                    <input
+                      type="text"
+                      value={editSubjectSpecialty}
+                      onChange={(e) => setEditSubjectSpecialty(e.target.value)}
+                      placeholder="Contoh: Fisika / Kimia"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Kata Sandi Baru (Opsional)
+                </label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Kosongkan jika tidak ingin mengubah password"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Status Akun</label>
+                <select
+                  value={editIsActive ? 'active' : 'inactive'}
+                  onChange={(e) => setEditIsActive(e.target.value === 'active')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="active">Aktif (Dapat Login)</option>
+                  <option value="inactive">Nonaktif (Akses Dinonaktifkan)</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedUserForEdit(null);
+                  }}
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                  disabled={isSavingEdit}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs disabled:opacity-50"
+                >
+                  {isSavingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {showDeleteModal && selectedUserForDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-xs">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Hapus Akun Pengguna</h3>
+                <p className="text-slate-500 text-[11px]">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <p className="text-slate-600 leading-relaxed mb-4">
+              Apakah Anda yakin ingin menghapus akun <strong className="text-slate-900">{selectedUserForDelete.name}</strong> (@{selectedUserForDelete.username}) dengan peran <strong className="uppercase">{selectedUserForDelete.role}</strong>?
+            </p>
+
+            <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setSelectedUserForDelete(null);
+                }}
+                disabled={isDeleting}
+                className="px-3.5 py-1.5 font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Menghapus...' : 'Hapus Akun'}</span>
               </button>
             </div>
           </div>

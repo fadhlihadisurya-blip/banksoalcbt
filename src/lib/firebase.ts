@@ -1,5 +1,13 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -61,6 +69,56 @@ export async function loginWithGoogle() {
     return result.user;
   } catch (err) {
     console.error('Google Sign-In Error:', err);
+    throw err;
+  }
+}
+
+export async function loginWithEmailPassword(email: string, pass: string) {
+  const cleanEmail = email.trim();
+  try {
+    const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+    return cred.user;
+  } catch (err: any) {
+    // If user not found and it's a recognized school admin email, attempt initial bootstrap registration
+    if (
+      err.code === 'auth/user-not-found' ||
+      err.code === 'auth/invalid-credential'
+    ) {
+      const lower = cleanEmail.toLowerCase();
+      if (
+        lower === 'fadhlihadisurya@gmail.com' ||
+        lower === 'admin@sman1prestasi.sch.id' ||
+        lower.startsWith('admin@')
+      ) {
+        try {
+          const newCred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+          return newCred.user;
+        } catch (createErr) {
+          // If creation fails, throw original authentication error
+          console.warn('Bootstrap creation skipped:', createErr);
+        }
+      }
+    }
+    console.error('Firebase Email/Password Login Error:', err);
+    throw err;
+  }
+}
+
+export async function registerWithEmailPassword(email: string, pass: string) {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+    return cred.user;
+  } catch (err) {
+    console.error('Firebase Email/Password Register Error:', err);
+    throw err;
+  }
+}
+
+export async function resetPasswordEmail(email: string) {
+  try {
+    await sendPasswordResetEmail(auth, email.trim());
+  } catch (err) {
+    console.error('Firebase Reset Password Error:', err);
     throw err;
   }
 }

@@ -1,7 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types/cbt';
 import { api } from '../lib/api';
-import { auth, loginWithGoogle, logoutFirebase } from '../lib/firebase';
+import {
+  auth,
+  loginWithGoogle,
+  loginWithEmailPassword,
+  logoutFirebase,
+} from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 interface AuthContextType {
@@ -9,6 +14,7 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   loginGoogle: () => Promise<void>;
+  loginAdminEmail: (email: string, pass: string) => Promise<void>;
   logout: () => void;
   quickSwitch: (role: UserRole) => Promise<void>;
 }
@@ -20,15 +26,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listen to Firebase auth state changes
+    // Listen to Firebase auth state changes (Google or Email/Password Provider)
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        // If Google user is authenticated, create or map local user
-        const isAdmin = fbUser.email === 'Fadhlihadisurya@gmail.com';
+        const emailLower = (fbUser.email || '').toLowerCase();
+        // Determine role: Super admin or school admin
+        const isAdmin =
+          emailLower === 'fadhlihadisurya@gmail.com' ||
+          emailLower === 'admin@sman1prestasi.sch.id' ||
+          emailLower.includes('admin');
+
         const mappedUser: User = {
           id: fbUser.uid,
-          username: fbUser.email?.split('@')[0] || 'google_user',
-          name: fbUser.displayName || 'Google User',
+          username: fbUser.email?.split('@')[0] || 'admin_firebase',
+          name: fbUser.displayName || (isAdmin ? 'Administrator (Firebase)' : 'Guru (Firebase)'),
           email: fbUser.email || '',
           role: isAdmin ? 'admin' : 'teacher',
           isActive: true,
@@ -73,13 +84,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       const fbUser = await loginWithGoogle();
-      const isAdmin = fbUser.email === 'Fadhlihadisurya@gmail.com';
+      const emailLower = (fbUser.email || '').toLowerCase();
+      const isAdmin =
+        emailLower === 'fadhlihadisurya@gmail.com' ||
+        emailLower === 'admin@sman1prestasi.sch.id' ||
+        emailLower.includes('admin');
+
       const mappedUser: User = {
         id: fbUser.uid,
         username: fbUser.email?.split('@')[0] || 'google_user',
-        name: fbUser.displayName || 'Google User',
+        name: fbUser.displayName || 'Google Administrator',
         email: fbUser.email || '',
         role: isAdmin ? 'admin' : 'teacher',
+        isActive: true,
+        lastLogin: new Date().toISOString(),
+      };
+      setUser(mappedUser);
+      localStorage.setItem('cbt_user_session', JSON.stringify(mappedUser));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Firebase Email/Password Provider Login specifically for Administrator
+  const loginAdminEmail = async (email: string, pass: string) => {
+    setLoading(true);
+    try {
+      const fbUser = await loginWithEmailPassword(email, pass);
+      const mappedUser: User = {
+        id: fbUser.uid,
+        username: fbUser.email?.split('@')[0] || 'admin_email',
+        name: fbUser.displayName || 'Administrator (Firebase Auth)',
+        email: fbUser.email || email,
+        role: 'admin',
         isActive: true,
         lastLogin: new Date().toISOString(),
       };
@@ -106,11 +143,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       username = 'siswa1';
       pass = 'siswa123';
     }
-    await login(username, pass);
+    try {
+      await login(username, pass);
+    } catch (err) {
+      try {
+        await login(username, username);
+      } catch {
+        console.error('Quick switch failed:', err);
+        throw err;
+      }
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginGoogle, logout, quickSwitch }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        loginGoogle,
+        loginAdminEmail,
+        logout,
+        quickSwitch,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

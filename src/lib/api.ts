@@ -58,6 +58,17 @@ export const api = {
       body: JSON.stringify(userData),
     }),
 
+  updateUser: (userId: string, userData: Partial<User> & { password?: string }) =>
+    request<{ success: boolean; user: User; message: string }>(`/admin/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    }),
+
+  deleteUser: (userId: string) =>
+    request<{ success: boolean; message: string }>(`/admin/users/${userId}`, {
+      method: 'DELETE',
+    }),
+
   resetPassword: (userId: string, newPassword?: string) =>
     request<{ success: boolean; message: string }>('/admin/users/reset-password', {
       method: 'POST',
@@ -83,6 +94,17 @@ export const api = {
     request<{ success: boolean; class: ClassGroup }>('/classes', {
       method: 'POST',
       body: JSON.stringify(classData),
+    }),
+
+  updateClass: (id: string, classData: Partial<ClassGroup>) =>
+    request<{ success: boolean; class: ClassGroup; message: string }>(`/classes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(classData),
+    }),
+
+  deleteClass: (id: string) =>
+    request<{ success: boolean; message: string }>(`/classes/${id}`, {
+      method: 'DELETE',
     }),
 
   // Taxonomy

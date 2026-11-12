@@ -137,9 +137,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                   Uji Coba Multi-Role:
                 </div>
                 <button
-                  onClick={() => {
-                    quickSwitch('admin');
+                  onClick={async () => {
                     setShowRoleSwitcher(false);
+                    try {
+                      await quickSwitch('admin');
+                    } catch (e: any) {
+                      console.error('Role switch error:', e);
+                    }
                   }}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-indigo-50 ${user?.role === 'admin' ? 'bg-indigo-50/70 text-indigo-700 font-semibold' : 'text-slate-700'}`}
                 >
@@ -147,9 +151,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                   <span className="text-[10px] text-slate-400">Drs. Hendro</span>
                 </button>
                 <button
-                  onClick={() => {
-                    quickSwitch('teacher');
+                  onClick={async () => {
                     setShowRoleSwitcher(false);
+                    try {
+                      await quickSwitch('teacher');
+                    } catch (e: any) {
+                      console.error('Role switch error:', e);
+                    }
                   }}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-indigo-50 ${user?.role === 'teacher' ? 'bg-indigo-50/70 text-indigo-700 font-semibold' : 'text-slate-700'}`}
                 >
@@ -157,9 +165,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                   <span className="text-[10px] text-slate-400">Ahmad Fauzi</span>
                 </button>
                 <button
-                  onClick={() => {
-                    quickSwitch('student');
+                  onClick={async () => {
                     setShowRoleSwitcher(false);
+                    try {
+                      await quickSwitch('student');
+                    } catch (e: any) {
+                      console.error('Role switch error:', e);
+                    }
                   }}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-indigo-50 ${user?.role === 'student' ? 'bg-indigo-50/70 text-indigo-700 font-semibold' : 'text-slate-700'}`}
                 >
@@ -221,16 +233,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             })}
           </div>
 
-          {/* School System Status Note */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-              <span className="text-xs font-semibold text-slate-700">Firebase Firestore & Auth</span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Firestore cloud database aktif, keamanan rules terverifikasi, dan autosave tersinkronisasi.
-            </p>
-          </div>
         </aside>
 
         {/* Mobile Navigation Drawer */}
