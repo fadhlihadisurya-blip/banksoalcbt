@@ -171,6 +171,13 @@
       "name": "XII IPS 1",
       "academicYearId": "ay-2024-genap",
       "homeroomTeacher": "Drs. H. Mulyadi"
+    },
+    {
+      "id": "cls-1794465653719",
+      "gradeLevel": "X",
+      "name": "10 Asiah",
+      "academicYearId": "ay-2024-genap",
+      "homeroomTeacher": ""
     }
   ],
   "subjects": [

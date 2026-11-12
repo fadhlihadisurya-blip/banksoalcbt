@@ -16,23 +16,51 @@ import {
   AIIndividualAnalytics,
   AIClassicalAnalytics,
 } from '../types/cbt';
+import { clientStore } from './clientStore';
 
 const API_BASE = '/api';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
 
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Terjadi kesalahan pada server.');
+    const text = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Returned HTML or non-JSON (e.g. Vercel 404 "The page could not be found")
+      console.warn(`[CBT] Fallback ke clientStore untuk endpoint: ${endpoint}`);
+      return clientStore.handleRequest<T>(endpoint, options);
+    }
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        return clientStore.handleRequest<T>(endpoint, options);
+      }
+      throw new Error(data?.error || 'Terjadi kesalahan pada server.');
+    }
+
+    return data as T;
+  } catch (err: any) {
+    if (
+      err.message &&
+      (err.message.includes('Unexpected token') ||
+        err.message.includes('Failed to fetch') ||
+        err.message.includes('NetworkError') ||
+        err.message.includes('Load failed'))
+    ) {
+      console.warn(`[CBT] Fallback ke clientStore karena error jaringan: ${err.message}`);
+      return clientStore.handleRequest<T>(endpoint, options);
+    }
+    throw err;
   }
-  return data;
 }
 
 export const api = {
