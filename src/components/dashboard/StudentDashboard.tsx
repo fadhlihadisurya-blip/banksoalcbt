@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 interface StudentDashboardProps {
-  onStartExam: (examId: string, inputToken?: string) => void;
+  onStartExam: (examId: string, inputToken?: string) => Promise<void>;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam }) => {
@@ -29,6 +29,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
   const [selectedExamForToken, setSelectedExamForToken] = useState<StudentExamInfo | null>(null);
   const [inputToken, setInputToken] = useState('');
   const [tokenError, setTokenError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [startingExamId, setStartingExamId] = useState<string | null>(null);
   const [submittingToken, setSubmittingToken] = useState(false);
 
   useEffect(() => {
@@ -59,10 +61,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
     }
   };
 
-  const handleOpenTokenDialog = (exam: StudentExamInfo) => {
+  const handleOpenTokenDialog = async (exam: StudentExamInfo) => {
+    setActionError('');
     if (exam.studentStatus === 'in_progress') {
-      // Direct resume without re-entering token
-      onStartExam(exam.id);
+      setStartingExamId(exam.id);
+      try {
+        // Direct resume without re-entering token
+        await onStartExam(exam.id);
+      } catch (err: any) {
+        setActionError(err?.message || 'Gagal melanjutkan sesi ujian.');
+      } finally {
+        setStartingExamId(null);
+      }
       return;
     }
     setSelectedExamForToken(exam);
@@ -71,7 +81,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
   };
 
   const handleConfirmStart = async () => {
-    if (!selectedExamForToken) return;
+    if (!selectedExamForToken || submittingToken) return;
     if (selectedExamForToken.isTokenActive && !inputToken.trim()) {
       setTokenError('Masukkan token ujian yang diberikan pengawas.');
       return;
@@ -81,10 +91,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
     setTokenError('');
     try {
       // Validate by starting
-      onStartExam(selectedExamForToken.id, inputToken.trim());
+      await onStartExam(selectedExamForToken.id, inputToken.trim());
       setSelectedExamForToken(null);
     } catch (err: any) {
-      setTokenError(err.message || 'Token tidak valid.');
+      setTokenError(err?.message || 'Token tidak valid.');
     } finally {
       setSubmittingToken(false);
     }
@@ -136,6 +146,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
             Segarkan Daftar
           </button>
         </div>
+
+        {actionError && (
+          <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{actionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionError('')}
+              className="text-rose-500 hover:text-rose-700 font-semibold"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center py-12 text-slate-400 text-xs">Memuat daftar ujian...</div>
@@ -231,10 +257,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                     ) : exam.studentStatus === 'in_progress' ? (
                       <button
                         onClick={() => handleOpenTokenDialog(exam)}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+                        disabled={startingExamId === exam.id}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Lanjutkan Ujian</span>
+                        <span>{startingExamId === exam.id ? 'Memuat...' : 'Lanjutkan Ujian'}</span>
                       </button>
                     ) : (
                       <button
@@ -293,7 +320,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                   <input
                     type="text"
                     value={inputToken}
-                    onChange={(e) => setInputToken(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      setInputToken(e.target.value.toUpperCase());
+                      if (tokenError) setTokenError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleConfirmStart();
+                      }
+                    }}
                     placeholder="Masukkan kode token..."
                     maxLength={10}
                     className="w-full px-3 py-2.5 text-center text-lg font-bold font-mono tracking-widest uppercase border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -307,7 +343,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
               <button
                 type="button"
                 onClick={() => setSelectedExamForToken(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                disabled={submittingToken}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
                 Batal
               </button>

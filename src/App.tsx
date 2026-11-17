@@ -70,6 +70,7 @@ function MainApp() {
         initialSession={activeExamSession.session}
         questions={activeExamSession.questions}
         examMeta={activeExamSession.examMeta}
+        onExit={() => setActiveExamSession(null)}
         onFinish={() => {
           setActiveExamSession(null);
           setCurrentTab('results');
@@ -79,18 +80,17 @@ function MainApp() {
   }
 
   // Student starts exam
-  const handleStartExam = async (examId: string, inputToken?: string) => {
-    try {
-      const res = await api.startExam(examId, user.id, inputToken);
-      setActiveExamSession({
-        examId,
-        session: res.session,
-        questions: res.questions,
-        examMeta: res.exam,
-      });
-    } catch (err: any) {
-      alert(err.message || 'Gagal memulai ujian.');
+  const handleStartExam = async (examId: string, inputToken?: string): Promise<void> => {
+    const res = await api.startExam(examId, user.id, inputToken);
+    if (!res || !res.session || !Array.isArray(res.questions) || !res.exam) {
+      throw new Error('Gagal memuat paket soal ujian. Silakan coba lagi.');
     }
+    setActiveExamSession({
+      examId,
+      session: res.session,
+      questions: res.questions,
+      examMeta: res.exam,
+    });
   };
 
   const renderContent = () => {
@@ -132,6 +132,18 @@ function MainApp() {
               onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
             />
           );
+        case 'results':
+          return (
+            <ExamResultsView
+              initialExamId={analyticsExamId || monitoringExamId}
+              onOpenAnalytics={(id) => {
+                setAnalyticsExamId(id);
+                setCurrentTab('analytics');
+              }}
+            />
+          );
+        case 'analytics':
+          return <AIAnalyticsView initialExamId={analyticsExamId} />;
         default:
           return <AdminDashboard onNavigate={(tab) => setCurrentTab(tab)} />;
       }
@@ -266,12 +278,65 @@ function MainApp() {
   );
 }
 
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return {
+      hasError: true,
+      message: error?.message || 'Terjadi kesalahan saat menampilkan halaman.',
+    };
+  }
+
+  componentDidCatch(error: any) {
+    console.error('Unhandled application error:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-100">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-xl">
+            <h2 className="text-base font-bold text-white">Terjadi Gangguan Tampilan</h2>
+            <p className="text-xs text-slate-300 leading-relaxed">{this.state.message}</p>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => this.setState({ hasError: false, message: '' })}
+                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-semibold text-white transition-colors"
+              >
+                Kembali
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-colors"
+              >
+                Muat Ulang
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <SettingsProvider>
-      <AuthProvider>
-        <MainApp />
-      </AuthProvider>
-    </SettingsProvider>
+    <AppErrorBoundary>
+      <SettingsProvider>
+        <AuthProvider>
+          <MainApp />
+        </AuthProvider>
+      </SettingsProvider>
+    </AppErrorBoundary>
   );
 }

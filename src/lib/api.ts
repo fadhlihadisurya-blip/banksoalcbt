@@ -13,6 +13,7 @@ import {
   StudentQuestionItem,
   MonitoringPayload,
   ExamResultItem,
+  StudentResultsPayload,
   AIIndividualAnalytics,
   AIClassicalAnalytics,
   SchoolSettings,
@@ -414,6 +415,9 @@ export const api = {
         passingRate: number;
       };
     }>(`/exams/${examId}/results`),
+
+  getStudentResults: (studentId: string) =>
+    request<StudentResultsPayload>(`/student/results?studentId=${encodeURIComponent(studentId)}`),
 
   runIndividualAIAnalytics: (examId: string, studentId: string) =>
     request<{ success: boolean; analytics: AIIndividualAnalytics | null; message?: string }>('/analytics/individual', {

@@ -333,6 +333,24 @@ export const clientStore = {
       return { exams: [] } as unknown as T;
     }
 
+    if (cleanPath === '/student/results' && method === 'GET') {
+      const params = new URLSearchParams(queryString || '');
+      const studentId = params.get('studentId') || '';
+      if (studentId) {
+        const fsRes = await firestoreStore.getStudentResults(studentId);
+        return (
+          fsRes || {
+            results: [],
+            stats: { totalCompleted: 0, hasHiddenScores: false, average: 0, highest: 0, lowest: 0, median: 0 },
+          }
+        ) as unknown as T;
+      }
+      return {
+        results: [],
+        stats: { totalCompleted: 0, hasHiddenScores: false, average: 0, highest: 0, lowest: 0, median: 0 },
+      } as unknown as T;
+    }
+
     if (cleanPath.startsWith('/exams/') && cleanPath.split('/').length === 3) {
       const examId = cleanPath.replace('/exams/', '');
       if (method === 'PUT') {
@@ -389,6 +407,35 @@ export const clientStore = {
         body?.action,
         body?.additionalMinutes
       );
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/start') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/start', '');
+      const fsRes = await firestoreStore.startExam(examId, body?.studentId, body?.inputToken);
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/autosave') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/autosave', '');
+      const fsRes = await firestoreStore.autosaveExam(examId, body?.studentId, body || {});
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/violation') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/violation', '');
+      const fsRes = await firestoreStore.recordViolation(
+        examId,
+        body?.studentId,
+        body?.type,
+        body?.description
+      );
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/submit') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/submit', '');
+      const fsRes = await firestoreStore.submitExam(examId, body?.studentId, body?.answers);
       if (fsRes) return fsRes as unknown as T;
     }
 

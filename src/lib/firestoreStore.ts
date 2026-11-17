@@ -19,7 +19,9 @@ import {
 } from './questionCode';
 import { generateRandomPassword } from './passwordUtils';
 import { computeLiveStudentScore } from './liveScore';
-import { isQuestionInExamScope, evaluateScopeAvailability } from './examPool';
+import { isQuestionInExamScope, questionMatchesScopeUnit, evaluateScopeAvailability } from './examPool';
+
+class DomainValidationError extends Error {}
 
 const DEFAULT_ACADEMIC_YEARS = [
   { id: 'ay-2024-genap', name: '2024/2025', semester: 'Genap', isActive: true },
@@ -767,6 +769,517 @@ export const firestoreStore = {
     }
   },
 
+  startExam: async (examId: string, studentId: string, inputToken?: string) => {
+    const sessionKey = `${examId}_${studentId}`;
+    const path = `exam_sessions/${sessionKey}`;
+    try {
+      const [examSnap, usersSnap, classesSnap, questionsSnap, taxSnap, sessionSnap] = await Promise.all([
+        getDoc(doc(db, 'exams', examId)),
+        getDocs(query(collection(db, 'users'), where('id', '==', studentId))),
+        getDocs(collection(db, 'classes')),
+        getDocs(collection(db, 'questions')),
+        getDocs(collection(db, 'taxonomy')),
+        getDoc(doc(db, 'exam_sessions', sessionKey)),
+      ]);
+
+      const exam = examSnap.exists() ? ({ id: examSnap.id, ...(examSnap.data() as any) }) : null;
+      if (!exam) throw new DomainValidationError('Ujian tidak ditemukan.');
+
+      let student: any = !usersSnap.empty ? usersSnap.docs[0].data() : null;
+      if (!student) {
+        const directUser = await getDoc(doc(db, 'users', studentId));
+        if (directUser.exists()) student = directUser.data();
+      }
+      if (!student) throw new DomainValidationError('Siswa tidak ditemukan.');
+
+      if (!Array.isArray(exam.targetClassIds) || !exam.targetClassIds.includes(student.classId)) {
+        throw new DomainValidationError('Kelas Anda tidak terdaftar sebagai peserta ujian ini.');
+      }
+
+      const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const taxItems = taxSnap.docs.map((d) => d.data() as any);
+      const subjects = taxItems.filter((t) => t.type === 'subject');
+      const subchapters = taxItems
+        .filter((t) => t.type === 'subchapter')
+        .map((t) => ({ id: String(t.id || ''), chapterId: String(t.chapterId || '') }));
+      const competencies = taxItems
+        .filter((t) => t.type === 'competency')
+        .map((t) => ({ id: String(t.id || ''), subchapterId: String(t.subchapterId || '') }));
+
+      const shuffle = <T>(arr: T[]): T[] => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      };
+
+      const sanitizeQuestions = (pickedQuestions: any[]) =>
+        pickedQuestions.map((q: any, idx: number) => {
+          let sanitizedOptions: any = undefined;
+          if (q.options && Array.isArray(q.options)) {
+            if (q.type === 'pg' || q.type === 'pg_kompleks') {
+              sanitizedOptions = shuffle(q.options).map((opt: any) => ({
+                id: opt.id,
+                text: opt.text,
+              }));
+            } else {
+              sanitizedOptions = q.options.map((opt: any) => ({
+                id: opt.id,
+                text: opt.text,
+              }));
+            }
+          }
+
+          const cogLevel = q.cognitiveLevel || 'MOTS';
+          const configuredWeight = exam.scoringConfig?.weights?.[cogLevel];
+          const resolvedPoints =
+            typeof configuredWeight === 'number' && !Number.isNaN(configuredWeight) && configuredWeight >= 0
+              ? configuredWeight
+              : q.points || 10;
+
+          const maxSelectable =
+            q.type === 'pg_kompleks' && Array.isArray(q.correctAnswer)
+              ? q.correctAnswer.length
+              : undefined;
+
+          return {
+            number: idx + 1,
+            id: q.id,
+            subjectId: q.subjectId,
+            chapterId: q.chapterId,
+            subchapterId: q.subchapterId,
+            competencyId: q.competencyId,
+            cognitiveLevel: cogLevel,
+            type: q.type,
+            questionText: q.questionText,
+            options: sanitizedOptions,
+            points: resolvedPoints,
+            ...(maxSelectable !== undefined ? { maxSelectable } : {}),
+          };
+        });
+
+      let session: any = sessionSnap.exists() ? sessionSnap.data() : null;
+      let pickedQuestions: any[] = [];
+
+      if (!session) {
+        if (exam.isTokenActive) {
+          if (
+            !inputToken ||
+            inputToken.trim().toUpperCase() !== String(exam.token || '').trim().toUpperCase()
+          ) {
+            throw new DomainValidationError('Token ujian tidak valid atau sudah kedaluwarsa.');
+          }
+        }
+
+        const now = new Date();
+        if (exam.scheduleStart && new Date(exam.scheduleStart) > now) {
+          throw new DomainValidationError('Ujian belum dimulai sesuai jadwal.');
+        }
+        if (exam.scheduleEnd && new Date(exam.scheduleEnd) < now) {
+          throw new DomainValidationError('Waktu ujian telah berakhir.');
+        }
+
+        const eligibleQuestions = allQuestions.filter((q: any) =>
+          isQuestionInExamScope(
+            q,
+            {
+              subjectId: exam.subjectId,
+              selectedChapterIds: exam.selectedChapterIds,
+              selectedSubchapterIds: exam.selectedSubchapterIds,
+              selectedCompetencyIds: exam.selectedCompetencyIds,
+            },
+            { subchapters, competencies }
+          )
+        );
+
+        const target = exam.cognitiveTarget || { lotsCount: 1, motsCount: 2, hotsCount: 1, totalQuestions: 4 };
+        let combined: any[] = [];
+
+        if (Array.isArray(target.perScopeTargets) && target.perScopeTargets.length > 0) {
+          const usedIds = new Set<string>();
+          for (const unit of target.perScopeTargets) {
+            const unitPool: any[] = eligibleQuestions.filter(
+              (q: any) => !usedIds.has(q.id) && questionMatchesScopeUnit(q, unit)
+            );
+            const uLots = shuffle<any>(unitPool.filter((q: any) => q.cognitiveLevel === 'LOTS')).slice(
+              0,
+              Math.max(0, Number(unit.lotsCount) || 0)
+            );
+            const uMots = shuffle<any>(unitPool.filter((q: any) => q.cognitiveLevel === 'MOTS')).slice(
+              0,
+              Math.max(0, Number(unit.motsCount) || 0)
+            );
+            const uHots = shuffle<any>(unitPool.filter((q: any) => q.cognitiveLevel === 'HOTS')).slice(
+              0,
+              Math.max(0, Number(unit.hotsCount) || 0)
+            );
+            for (const picked of [...uLots, ...uMots, ...uHots]) {
+              usedIds.add(picked.id);
+              combined.push(picked);
+            }
+          }
+        } else {
+          const lots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'LOTS');
+          const mots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'MOTS');
+          const hots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'HOTS');
+          combined = [
+            ...shuffle(lots).slice(0, target.lotsCount || 1),
+            ...shuffle(mots).slice(0, target.motsCount || 2),
+            ...shuffle(hots).slice(0, target.hotsCount || 1),
+          ];
+        }
+
+        if (combined.length === 0) {
+          combined = shuffle(eligibleQuestions).slice(0, target.totalQuestions || 5);
+        }
+        if (combined.length === 0) {
+          throw new DomainValidationError('Bank soal untuk cakupan ujian ini masih kosong.');
+        }
+
+        pickedQuestions = shuffle(combined);
+        const classDoc = classesSnap.docs.find((c) => c.id === student.classId || c.data()?.id === student.classId);
+        const studentClassName = classDoc?.data()?.name || 'Kelas';
+
+        session = {
+          id: sessionKey,
+          examId,
+          studentId,
+          studentName: student.name,
+          studentNis: student.nis || student.username,
+          className: studentClassName,
+          status: 'in_progress',
+          startedAt: new Date().toISOString(),
+          durationSeconds: (exam.durationMinutes || 60) * 60,
+          remainingSeconds: (exam.durationMinutes || 60) * 60,
+          currentQuestionIndex: 0,
+          answers: {},
+          doubtfulFlags: {},
+          violationCount: 0,
+          violations: [],
+          questionIds: pickedQuestions.map((q: any) => q.id),
+          lastHeartbeat: new Date().toISOString(),
+        };
+
+        await setDoc(doc(db, 'exam_sessions', sessionKey), session);
+      } else {
+        if (session.status === 'completed') {
+          throw new DomainValidationError('Anda sudah menyelesaikan ujian ini.');
+        }
+        const qMap = new Map(allQuestions.map((q: any) => [q.id, q]));
+        pickedQuestions = (Array.isArray(session.questionIds) ? session.questionIds : [])
+          .map((qid: string) => qMap.get(qid))
+          .filter(Boolean);
+        if (pickedQuestions.length === 0) {
+          throw new DomainValidationError('Paket soal untuk sesi ini tidak ditemukan atau sudah dihapus.');
+        }
+      }
+
+      const subjectName =
+        subjects.find((s: any) => s.id === exam.subjectId)?.name || 'Mata Pelajaran';
+
+      return {
+        success: true,
+        session,
+        exam: {
+          id: exam.id,
+          title: exam.title,
+          subjectName,
+          durationMinutes: exam.durationMinutes,
+          antiCheating: exam.antiCheating,
+          scoringConfig: exam.scoringConfig || {
+            pgKompleksMode: 'partial',
+            useMinusSystem: false,
+            minusValue: 0,
+            weights: { LOTS: 10, MOTS: 10, HOTS: 10 },
+          },
+        },
+        questions: sanitizeQuestions(pickedQuestions),
+      };
+    } catch (error) {
+      if (error instanceof DomainValidationError) {
+        throw error;
+      }
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  autosaveExam: async (
+    examId: string,
+    studentId: string,
+    payload: {
+      answers?: Record<string, any>;
+      doubtfulFlags?: Record<string, boolean>;
+      currentQuestionIndex?: number;
+      remainingSeconds?: number;
+    }
+  ) => {
+    const sessionKey = `${examId}_${studentId}`;
+    const path = `exam_sessions/${sessionKey}`;
+    try {
+      const ref = doc(db, 'exam_sessions', sessionKey);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) throw new DomainValidationError('Sesi ujian tidak aktif.');
+      const session = snap.data() as any;
+      if (session.status === 'completed') throw new DomainValidationError('Ujian sudah diserahkan.');
+
+      const nextAnswers = payload.answers ? { ...(session.answers || {}), ...payload.answers } : session.answers || {};
+      const nextFlags = payload.doubtfulFlags
+        ? { ...(session.doubtfulFlags || {}), ...payload.doubtfulFlags }
+        : session.doubtfulFlags || {};
+      const nextIndex =
+        typeof payload.currentQuestionIndex === 'number'
+          ? payload.currentQuestionIndex
+          : session.currentQuestionIndex || 0;
+      const nextRemaining =
+        typeof payload.remainingSeconds === 'number'
+          ? payload.remainingSeconds
+          : session.remainingSeconds;
+      const lastHeartbeat = new Date().toISOString();
+
+      await updateDoc(ref, {
+        answers: nextAnswers,
+        doubtfulFlags: nextFlags,
+        currentQuestionIndex: nextIndex,
+        remainingSeconds: nextRemaining,
+        lastHeartbeat,
+      });
+
+      const answeredCount = Object.values(nextAnswers).filter(
+        (v: any) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
+      ).length;
+
+      return { success: true, savedAt: lastHeartbeat, answeredCount };
+    } catch (error) {
+      if (error instanceof DomainValidationError) throw error;
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  recordViolation: async (examId: string, studentId: string, type: string, description: string) => {
+    const sessionKey = `${examId}_${studentId}`;
+    const path = `exam_sessions/${sessionKey}`;
+    try {
+      const ref = doc(db, 'exam_sessions', sessionKey);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) throw new DomainValidationError('Sesi tidak ditemukan.');
+      const session = snap.data() as any;
+
+      const violationCount = (session.violationCount || 0) + 1;
+      const level: 1 | 2 | 3 = violationCount === 1 ? 1 : violationCount === 2 ? 2 : 3;
+      const entry = {
+        id: `v-${Date.now()}`,
+        type: type || 'SUSPICIOUS_ACTIVITY',
+        description: description || 'Aktivitas mencurigakan terdeteksi.',
+        timestamp: new Date().toISOString(),
+        level,
+      };
+      const violations = [...(session.violations || []), entry];
+      const nextStatus = violationCount >= 2 && session.status !== 'completed' ? 'suspicious' : session.status;
+
+      await updateDoc(ref, {
+        violationCount,
+        violations,
+        status: nextStatus,
+      });
+
+      return { success: true, violationCount, level, entry };
+    } catch (error) {
+      if (error instanceof DomainValidationError) throw error;
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  submitExam: async (examId: string, studentId: string, answers?: Record<string, any>) => {
+    const sessionKey = `${examId}_${studentId}`;
+    const path = `exam_results/${sessionKey}`;
+    try {
+      const [examSnap, sessionSnap, questionsSnap] = await Promise.all([
+        getDoc(doc(db, 'exams', examId)),
+        getDoc(doc(db, 'exam_sessions', sessionKey)),
+        getDocs(collection(db, 'questions')),
+      ]);
+
+      const exam = examSnap.exists() ? ({ id: examSnap.id, ...(examSnap.data() as any) }) : null;
+      const session = sessionSnap.exists() ? ({ ...(sessionSnap.data() as any) }) : null;
+      if (!exam || !session) {
+        throw new DomainValidationError('Data ujian atau sesi tidak ditemukan.');
+      }
+
+      const finalAnswers = answers ? { ...(session.answers || {}), ...answers } : session.answers || {};
+      const completedAt = new Date().toISOString();
+
+      const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const qMap = new Map(allQuestions.map((q: any) => [q.id, q]));
+      const questionIds: string[] = Array.isArray(session.questionIds) ? session.questionIds : [];
+
+      let totalPointsEarned = 0;
+      let maxPossiblePoints = 0;
+      let correctCount = 0;
+      let wrongCount = 0;
+      let emptyCount = 0;
+
+      const breakdownByCognitive: Record<string, { total: number; correct: number }> = {
+        LOTS: { total: 0, correct: 0 },
+        MOTS: { total: 0, correct: 0 },
+        HOTS: { total: 0, correct: 0 },
+      };
+
+      const useMinusSystem = Boolean(exam.scoringConfig?.useMinusSystem);
+      const minusValue = useMinusSystem ? Math.abs(Number(exam.scoringConfig?.minusValue) || 0) : 0;
+      const pgKompleksMode = exam.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial';
+
+      const questionDetails = questionIds.map((qid: string, idx: number) => {
+        const master = qMap.get(qid);
+        const studentAns = finalAnswers[qid];
+        const cogLevel = master?.cognitiveLevel || 'MOTS';
+        const configuredWeight = exam.scoringConfig?.weights?.[cogLevel];
+        const points =
+          typeof configuredWeight === 'number' && !Number.isNaN(configuredWeight) && configuredWeight >= 0
+            ? configuredWeight
+            : master?.points || 10;
+        maxPossiblePoints += points;
+
+        if (!breakdownByCognitive[cogLevel]) {
+          breakdownByCognitive[cogLevel] = { total: 0, correct: 0 };
+        }
+        breakdownByCognitive[cogLevel].total += 1;
+
+        let isCorrect = false;
+        let scoreEarned = 0;
+        let pendingManualGrade = false;
+
+        const isUnanswered =
+          studentAns === undefined ||
+          studentAns === null ||
+          studentAns === '' ||
+          (Array.isArray(studentAns) && studentAns.length === 0);
+
+        if (isUnanswered) {
+          emptyCount++;
+        } else if (master?.type === 'pg') {
+          if (String(studentAns).trim().toUpperCase() === String(master.correctAnswer).trim().toUpperCase()) {
+            isCorrect = true;
+            scoreEarned = points;
+            correctCount++;
+            breakdownByCognitive[cogLevel].correct += 1;
+          } else {
+            wrongCount++;
+            if (useMinusSystem) scoreEarned = -minusValue;
+          }
+        } else if (master?.type === 'pg_kompleks') {
+          const correctArr = Array.isArray(master.correctAnswer)
+            ? Array.from(new Set(master.correctAnswer.map(String))).sort()
+            : [];
+          const studentArr = Array.isArray(studentAns)
+            ? Array.from(new Set(studentAns.map(String))).sort()
+            : [];
+
+          if (correctArr.length > 0 && JSON.stringify(correctArr) === JSON.stringify(studentArr)) {
+            isCorrect = true;
+            scoreEarned = points;
+            correctCount++;
+            breakdownByCognitive[cogLevel].correct += 1;
+          } else {
+            wrongCount++;
+            if (pgKompleksMode === 'exact') {
+              scoreEarned = useMinusSystem ? -minusValue : 0;
+            } else if (correctArr.length > 0) {
+              const matches = studentArr.filter((item: string) => correctArr.includes(item)).length;
+              const wrongSelected = studentArr.length - matches;
+              const partialPoints = matches > 0 ? (matches / correctArr.length) * points : 0;
+              const penalty = useMinusSystem ? wrongSelected * minusValue : 0;
+              scoreEarned = Number((partialPoints - penalty).toFixed(4));
+            }
+          }
+        } else if (master?.type === 'benar_salah') {
+          if (String(studentAns) === String(master.correctAnswer)) {
+            isCorrect = true;
+            scoreEarned = points;
+            correctCount++;
+            breakdownByCognitive[cogLevel].correct += 1;
+          } else {
+            wrongCount++;
+            if (useMinusSystem) scoreEarned = -minusValue;
+          }
+        } else if (master?.type === 'esai') {
+          pendingManualGrade = true;
+          scoreEarned = Math.round(points * 0.8);
+          totalPointsEarned += scoreEarned;
+        }
+
+        if (!pendingManualGrade) {
+          totalPointsEarned += scoreEarned;
+        }
+
+        return {
+          questionId: qid,
+          number: idx + 1,
+          cognitiveLevel: cogLevel,
+          subchapterId: master?.subchapterId,
+          competencyId: master?.competencyId,
+          studentAnswer: studentAns ?? null,
+          isCorrect,
+          scoreEarned,
+          maxPoints: points,
+          pendingManualGrade,
+        };
+      });
+
+      const finalScore =
+        maxPossiblePoints > 0
+          ? Math.round((totalPointsEarned / maxPossiblePoints) * (exam.maxScore || 100))
+          : 0;
+      const isPassed = finalScore >= (exam.kktpScore || 75);
+
+      const result = {
+        id: `res-${Date.now()}`,
+        examId,
+        studentId,
+        studentName: session.studentName,
+        studentNis: session.studentNis,
+        className: session.className,
+        completedAt,
+        finalScore,
+        isPassed,
+        kktpScore: exam.kktpScore || 75,
+        correctCount,
+        wrongCount,
+        emptyCount,
+        totalQuestions: questionIds.length,
+        breakdownByCognitive,
+        questionDetails,
+        violationsRecorded: session.violations || [],
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, 'exam_sessions', sessionKey), {
+          answers: finalAnswers,
+          status: 'completed',
+          completedAt,
+        }),
+        setDoc(doc(db, 'exam_results', sessionKey), result),
+      ]);
+
+      return {
+        success: true,
+        result: {
+          finalScore: result.finalScore,
+          isPassed: result.isPassed,
+          correctCount,
+          wrongCount,
+          emptyCount,
+          totalQuestions: questionIds.length,
+          isPublished: exam.isPublishedResults,
+        },
+      };
+    } catch (error) {
+      if (error instanceof DomainValidationError) throw error;
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
   getMonitoringData: async (examId: string) => {
     const path = `exams/${examId}`;
     try {
@@ -964,6 +1477,81 @@ export const firestoreStore = {
           passingRate,
         },
       };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
+  getStudentResults: async (studentId: string) => {
+    const path = 'exam_results';
+    try {
+      const [resultsSnap, examsSnap] = await Promise.all([
+        getDocs(query(collection(db, path), where('studentId', '==', studentId))),
+        getDocs(collection(db, 'exams')),
+      ]);
+
+      const examMap = new Map<string, any>();
+      for (const eDoc of examsSnap.docs) {
+        const data = eDoc.data() as any;
+        examMap.set(data.id || eDoc.id, data);
+      }
+
+      const results = resultsSnap.docs
+        .map((d) => {
+          const r = d.data() as any;
+          const exam = examMap.get(r.examId);
+          const isPublished = Boolean(exam?.isPublishedResults);
+          return {
+            id: r.id || d.id,
+            examId: r.examId,
+            examTitle: exam?.title || 'Ujian Sekolah',
+            studentId: r.studentId,
+            studentName: r.studentName || '-',
+            studentNis: r.studentNis || '-',
+            className: r.className || '-',
+            completedAt: r.completedAt || '',
+            correctCount: Number(r.correctCount) || 0,
+            wrongCount: Number(r.wrongCount) || 0,
+            emptyCount: Number(r.emptyCount) || 0,
+            totalQuestions: Number(r.totalQuestions) || 0,
+            isPublishedResults: isPublished,
+            finalScore: isPublished ? (r.finalScore ?? 0) : null,
+          };
+        })
+        .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
+
+      const publishedScores = results
+        .filter((r) => r.isPublishedResults && typeof r.finalScore === 'number')
+        .map((r) => r.finalScore as number);
+
+      const hasHiddenScores = results.some((r) => !r.isPublishedResults);
+      const sorted = [...publishedScores].sort((a, b) => a - b);
+
+      const stats =
+        results.length === 0
+          ? { totalCompleted: 0, hasHiddenScores: false, average: 0, highest: 0, lowest: 0, median: 0 }
+          : publishedScores.length === 0
+          ? {
+              totalCompleted: results.length,
+              hasHiddenScores: true,
+              average: null,
+              highest: null,
+              lowest: null,
+              median: null,
+            }
+          : {
+              totalCompleted: results.length,
+              hasHiddenScores,
+              average: Math.round(publishedScores.reduce((a, b) => a + b, 0) / publishedScores.length),
+              highest: Math.max(...publishedScores),
+              lowest: Math.min(...publishedScores),
+              median:
+                sorted.length % 2 === 0
+                  ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+                  : sorted[Math.floor(sorted.length / 2)],
+            };
+
+      return { results, stats };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
     }

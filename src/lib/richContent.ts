@@ -2,7 +2,7 @@
 // pasted/uploaded images with compression, and safe HTML sanitization.
 
 const HTML_TAG_REGEX =
-  /<\/?(p|div|br|b|strong|i|em|u|s|strike|sub|sup|img|math|mrow|mfrac|msup|msub|msubsup|msqrt|mroot|mtable|mtr|mtd|mi|mn|mo|mtext|mspace|munder|mover|munderover|mfenced|mstyle|menclose|ul|ol|li|table|thead|tbody|tr|th|td|span)\b[^>]*>/i;
+  /<\/?(p|div|br|b|strong|i|em|u|s|strike|sub|sup|img|math|mrow|mfrac|msup|msub|msubsup|mmultiscripts|mprescripts|msqrt|mroot|mtable|mtr|mtd|mi|mn|mo|mtext|mspace|munder|mover|munderover|mfenced|mstyle|menclose|mphantom|none|ul|ol|li|table|thead|tbody|tr|th|td|span)\b[^>]*>/i;
 
 export function isRichHtml(content?: string | null): boolean {
   if (!content) return false;
@@ -209,16 +209,24 @@ export function convertOmmlToMathMl(ommlFragment: string): string {
       if (joined) return joined;
     }
 
-    // Fallback: parse as text/html after expanding self-closing <m:... /> tags
-    const expanded = cleanXmlFragment.replace(/<(m:[a-zA-Z0-9]+)(\s[^>]*)?\/>/gi, '<$1$2></$1>');
+    // Fallback: parse as text/html after expanding all namespaced self-closing tags (e.g. <m:sty/>, <w:rFonts/>)
+    const expanded = cleanXmlFragment.replace(
+      /<([a-zA-Z][a-zA-Z0-9]*:[a-zA-Z0-9]+)(\s[^>]*)?\/>/gi,
+      '<$1$2></$1>'
+    );
     const htmlDoc = new DOMParser().parseFromString(expanded, 'text/html');
     const outputs: string[] = [];
-    for (const child of Array.from(htmlDoc.body.children)) {
-      const ln = localName(child);
+    const walkForOmml = (el: Element) => {
+      const ln = localName(el);
       if (ln === 'omathpara' || ln === 'omath') {
-        outputs.push(ommlNodeToMathMl(child));
+        outputs.push(ommlNodeToMathMl(el));
+        return;
       }
-    }
+      for (const child of Array.from(el.children)) {
+        walkForOmml(child);
+      }
+    };
+    walkForOmml(htmlDoc.body);
     return outputs.join('');
   } catch {
     return '';
@@ -226,7 +234,8 @@ export function convertOmmlToMathMl(ommlFragment: string): string {
 }
 
 function localName(node: Element): string {
-  return (node.localName || node.tagName.replace(/^[^:]+:/, '')).toLowerCase();
+  // In HTML5 (text/html), prefixes like "m:" remain in node.localName, so always strip any prefix.
+  return (node.localName || node.tagName).replace(/^[^:]+:/, '').toLowerCase();
 }
 
 function findChild(parent: Element, name: string): Element | undefined {
@@ -243,12 +252,11 @@ function getPrVal(pr: Element | undefined, propName: string, defaultVal = ''): s
   if (!pr) return defaultVal;
   const el = findChild(pr, propName);
   if (!el) return defaultVal;
-  return (
-    el.getAttribute('m:val') ||
-    el.getAttribute('val') ||
-    el.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/math', 'val') ||
-    defaultVal
-  );
+  const val =
+    el.getAttribute('m:val') ??
+    el.getAttribute('val') ??
+    el.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/math', 'val');
+  return val !== null ? val : defaultVal;
 }
 
 function childrenToMathMl(parent: Element | undefined): string {
@@ -267,13 +275,18 @@ function childrenToMathMl(parent: Element | undefined): string {
 
 function tokenizeMathRunText(text: string): string {
   if (!text) return '';
-  // Split into numbers, operators, and identifiers cleanly
-  const tokens = text.match(/(\d+(?:[.,]\d+)?|[+\-−=<>≤≥≠≈×÷·*/^()[\]{}|,;:]|[A-Za-z\u0370-\u03FF]+|\s+)/g) || [text];
+  // Split into numbers, math/physics operators, identifiers (Latin/Greek/Delta), and whitespace
+  const tokens =
+    text.match(
+      /(\d+(?:[.,]\d+)?|[+\-−=<>≤≥≠≈×÷·*/^()[\]{}|,;:±→←↔⇒⇔°′″∞∂∇∈∉⊂⊆∪∩∀∃⊥∥∠]|\s+|[A-Za-z\u0370-\u03FF∆]+)/g
+    ) || [text];
   return tokens
     .map((tok) => {
       if (/^\s+$/.test(tok)) return '';
       if (/^\d+(?:[.,]\d+)?$/.test(tok)) return `<mn>${escapeHtmlText(tok)}</mn>`;
-      if (/^[+\-−=<>≤≥≠≈×÷·*/^()[\]{}|,;:]$/.test(tok)) return `<mo>${escapeHtmlText(tok)}</mo>`;
+      if (/^[+\-−=<>≤≥≠≈×÷·*/^()[\]{}|,;:±→←↔⇒⇔°′″∞∂∇∈∉⊂⊆∪∩∀∃⊥∥∠]$/.test(tok)) {
+        return `<mo>${escapeHtmlText(tok)}</mo>`;
+      }
       return `<mi>${escapeHtmlText(tok)}</mi>`;
     })
     .join('');
@@ -320,9 +333,18 @@ function ommlNodeToMathMl(node: Element): string {
     return tokenizeMathRunText(rawText);
   }
 
+  if (ln === 't') {
+    return tokenizeMathRunText(node.textContent || '');
+  }
+
   if (ln === 'f') {
+    const pr = findChild(node, 'fpr');
+    const fType = getPrVal(pr, 'type', 'bar').toLowerCase();
     const num = childrenToMathMl(findChild(node, 'num'));
     const den = childrenToMathMl(findChild(node, 'den'));
+    if (fType === 'nobar') {
+      return `<mfrac linethickness="0">${num}${den}</mfrac>`;
+    }
     return `<mfrac>${num}${den}</mfrac>`;
   }
 
@@ -425,7 +447,20 @@ function ommlNodeToMathMl(node: Element): string {
     return `<mover accent="true">${base}<mo>${escapeHtmlText(chr)}</mo></mover>`;
   }
 
-  if (ln === 'spre' || ln === 'e' || ln === 'box' || ln === 'groupchr' || ln === 'borderbox') {
+  if (ln === 'spre') {
+    const base = childrenToMathMl(findChild(node, 'e'));
+    const subEl = findChild(node, 'sub');
+    const supEl = findChild(node, 'sup');
+    const sub = subEl && (subEl.textContent || '').trim() ? childrenToMathMl(subEl) : '<none/>';
+    const sup = supEl && (supEl.textContent || '').trim() ? childrenToMathMl(supEl) : '<none/>';
+    return `<mmultiscripts>${base}<mprescripts/>${sub}${sup}</mmultiscripts>`;
+  }
+
+  if (ln === 'phant') {
+    return `<mphantom>${childrenToMathMl(findChild(node, 'e') || node)}</mphantom>`;
+  }
+
+  if (ln === 'e' || ln === 'box' || ln === 'groupchr' || ln === 'borderbox') {
     return childrenToMathMl(node);
   }
 
@@ -517,18 +552,24 @@ function preprocessWordHtml(rawHtml: string): string {
     return res || '';
   });
 
-  // 3. Completely remove MS Word's duplicate equation fallback images inside [if !msEquation]
+  // 3. Normalize <mml:math> prefixed tags if any
+  html = html.replace(/<(\/?)mml:/gi, '<$1');
+
+  // 4. Completely remove MS Word's duplicate equation fallback images inside [if !msEquation]
   //    (including any nested <!--[if gte vml 1]> and <![if !vml]><img><![endif]> blocks inside it)
+  const isNotMsEquationCond = (cond: string) =>
+    /^(?:!msEquation\b|!\s*\(\s*gte\s+msEquation\b|lt\s+msEquation\b)/i.test(cond);
+
   if (convertedEquationCount > 0 || /<math\b/i.test(html)) {
     html = replaceConditionalBlocks(
       html,
-      (cond) => /^!msEquation\b/i.test(cond),
+      isNotMsEquationCond,
       () => ''
     );
   } else {
     html = replaceConditionalBlocks(
       html,
-      (cond) => /^!msEquation\b/i.test(cond),
+      isNotMsEquationCond,
       (inner) => inner
     );
   }
@@ -590,9 +631,13 @@ const ALLOWED_MATHML_TAGS = new Set([
   'munder',
   'mover',
   'munderover',
+  'mmultiscripts',
+  'mprescripts',
   'mfenced',
   'mstyle',
   'menclose',
+  'mphantom',
+  'none',
 ]);
 
 const DROP_ENTIRE_TAGS = new Set([
@@ -636,7 +681,7 @@ export function sanitizeRichHtml(rawHtml: string): string {
         if (tag === 'math' && el.getAttribute('display') === 'block') {
           mathEl.setAttribute('display', 'block');
         }
-        for (const attr of ['mathvariant', 'accent', 'stretchy', 'fence', 'open', 'close', 'separators', 'columnalign']) {
+        for (const attr of ['mathvariant', 'accent', 'stretchy', 'fence', 'open', 'close', 'separators', 'columnalign', 'linethickness']) {
           const val = el.getAttribute(attr);
           if (val) mathEl.setAttribute(attr, val);
         }
@@ -725,6 +770,7 @@ export async function processClipboardPaste(
   clipboardData: DataTransfer
 ): Promise<{ html: string; plainText: string }> {
   const rawHtml = clipboardData.getData('text/html') || '';
+  const mathmlClipboard = clipboardData.getData('application/mathml+xml') || '';
   const plainText = clipboardData.getData('text/plain') || '';
   const rtfData = clipboardData.getData('text/rtf') || '';
 
@@ -744,7 +790,10 @@ export async function processClipboardPaste(
     }
   }
 
-  const preprocessedHtml = rawHtml ? preprocessWordHtml(rawHtml) : '';
+  let preprocessedHtml = rawHtml ? preprocessWordHtml(rawHtml) : '';
+  if (!/<math\b/i.test(preprocessedHtml) && /<math\b/i.test(mathmlClipboard)) {
+    preprocessedHtml = mathmlClipboard;
+  }
   const hasMathMl = /<math\b/i.test(preprocessedHtml);
   const hasRichTextOrMath =
     Boolean(preprocessedHtml) && (hasMathMl || stripHtmlToText(preprocessedHtml).length > 0);

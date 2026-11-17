@@ -59,6 +59,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         { id: 'taxonomy' as NavTab, label: 'Taksonomi Soal', icon: Layers },
         { id: 'exams' as NavTab, label: 'Daftar Ujian', icon: FileQuestion },
         { id: 'monitoring' as NavTab, label: 'Monitoring Ujian', icon: Activity },
+        { id: 'results' as NavTab, label: 'Hasil & Penilaian', icon: Award },
         { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
       ];
     }

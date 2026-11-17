@@ -31,6 +31,7 @@ interface ExamTakingViewProps {
     scoringConfig?: Exam['scoringConfig'];
   };
   onFinish: () => void;
+  onExit?: () => void;
 }
 
 export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
@@ -39,15 +40,23 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
   questions,
   examMeta,
   onFinish,
+  onExit,
 }) => {
   const { user } = useAuth();
+  const safeQuestions = Array.isArray(questions) ? questions : [];
 
   // State
-  const [currentIndex, setCurrentIndex] = useState(initialSession.currentQuestionIndex || 0);
-  const [answers, setAnswers] = useState<Record<string, any>>(initialSession.answers || {});
-  const [doubtfulFlags, setDoubtfulFlags] = useState<Record<string, boolean>>(initialSession.doubtfulFlags || {});
-  const [remainingSeconds, setRemainingSeconds] = useState(initialSession.remainingSeconds || examMeta.durationMinutes * 60);
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const idx = initialSession?.currentQuestionIndex || 0;
+    return safeQuestions.length > 0 ? Math.min(Math.max(0, idx), safeQuestions.length - 1) : 0;
+  });
+  const [answers, setAnswers] = useState<Record<string, any>>(initialSession?.answers || {});
+  const [doubtfulFlags, setDoubtfulFlags] = useState<Record<string, boolean>>(initialSession?.doubtfulFlags || {});
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    initialSession?.remainingSeconds || (examMeta?.durationMinutes || 60) * 60
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving'>('saved');
 
@@ -258,8 +267,9 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
   const handleFinalSubmit = async () => {
     if (!user?.id || isSubmitting) return;
     setIsSubmitting(true);
+    setSubmitError('');
     try {
-      await api.submitExam(examId, user.id, answers);
+      await api.submitExam(examId, user.id, answersRef.current);
       confetti({
         particleCount: 100,
         spread: 70,
@@ -268,14 +278,34 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
       setShowSubmitModal(false);
       onFinish();
     } catch (err: any) {
-      alert(err.message || 'Gagal menyerahkan ujian.');
+      setSubmitError(err?.message || 'Gagal menyerahkan ujian.');
+      setShowSubmitModal(true);
       setIsSubmitting(false);
     }
   };
 
-  const currentQ = questions[currentIndex];
+  const currentQ = safeQuestions[currentIndex];
   if (!currentQ) {
-    return <div className="text-center py-20 text-slate-500">Memuat soal ujian...</div>;
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4 text-slate-100">
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-xl">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 mx-auto flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-white">Soal Tidak Tersedia</h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Soal ujian tidak tersedia atau gagal dimuat. Silakan kembali ke dashboard siswa dan coba lagi.
+          </p>
+          <button
+            type="button"
+            onClick={() => (onExit ? onExit() : onFinish())}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-colors"
+          >
+            Kembali ke Dashboard
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Format timer
@@ -289,9 +319,9 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     val !== undefined && val !== null && val !== '' && !(Array.isArray(val) && val.length === 0);
 
   const isUrgentTime = remainingSeconds < 300; // < 5 minutes
-  const answeredCount = questions.filter((q) => hasAnswerValue(answers[q.id])).length;
+  const answeredCount = safeQuestions.filter((q) => hasAnswerValue(answers[q.id])).length;
   const doubtfulCount = Object.values(doubtfulFlags).filter(Boolean).length;
-  const unansweredCount = questions.length - answeredCount;
+  const unansweredCount = safeQuestions.length - answeredCount;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col text-slate-100 select-none">
@@ -319,10 +349,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           </div>
           <div>
             <h1 className="text-sm sm:text-base font-bold text-white tracking-tight truncate max-w-[200px] sm:max-w-md">
-              {examMeta.title}
+              {examMeta?.title || 'Ujian CBT'}
             </h1>
             <div className="text-xs text-slate-400 flex items-center gap-2">
-              <span>{examMeta.subjectName}</span>
+              <span>{examMeta?.subjectName || 'Mata Pelajaran'}</span>
               <span>·</span>
               <span>{user?.name} ({user?.nis})</span>
             </div>
@@ -360,7 +390,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                 <span className="font-bold text-base text-white font-mono">
                   Soal Nomor {currentIndex + 1}
                 </span>
-                <span>/ {questions.length}</span>
+                <span>/ {safeQuestions.length}</span>
                 <span>·</span>
                 <span className="font-semibold text-indigo-400 font-mono">
                   Level: {currentQ.cognitiveLevel}
@@ -413,7 +443,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               {/* 2. Pilihan Ganda Kompleks (PG Kompleks Multi) */}
               {currentQ.type === 'pg_kompleks' && currentQ.options && (() => {
                 const pgKompleksMode =
-                  examMeta.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial';
+                  examMeta?.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial';
                 const maxSelectable =
                   pgKompleksMode === 'partial' &&
                   typeof currentQ.maxSelectable === 'number' &&
@@ -561,7 +591,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               <span>Ragu-ragu</span>
             </label>
 
-            {currentIndex < questions.length - 1 ? (
+            {currentIndex < safeQuestions.length - 1 ? (
               <button
                 onClick={() => setCurrentIndex((idx) => idx + 1)}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
@@ -571,7 +601,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               </button>
             ) : (
               <button
-                onClick={() => setShowSubmitModal(true)}
+                onClick={() => {
+                  setSubmitError('');
+                  setShowSubmitModal(true);
+                }}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-lg shadow-emerald-900/40"
               >
                 <Send className="w-4 h-4" />
@@ -586,12 +619,12 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs">
               <span className="font-bold text-white uppercase tracking-wider">Navigasi Soal</span>
-              <span className="text-slate-400 font-mono">{answeredCount} / {questions.length} Dijawab</span>
+              <span className="text-slate-400 font-mono">{answeredCount} / {safeQuestions.length} Dijawab</span>
             </div>
 
             {/* Question Grid */}
             <div className="grid grid-cols-5 gap-2 mt-4">
-              {questions.map((q, idx) => {
+              {safeQuestions.map((q, idx) => {
                 const isCurrent = idx === currentIndex;
                 const isAnswered = hasAnswerValue(answers[q.id]);
                 const isDoubt = !!doubtfulFlags[q.id];
@@ -638,7 +671,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           </div>
 
           <button
-            onClick={() => setShowSubmitModal(true)}
+            onClick={() => {
+              setSubmitError('');
+              setShowSubmitModal(true);
+            }}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-colors flex items-center justify-center gap-2"
           >
             <Send className="w-4 h-4" />
@@ -655,6 +691,12 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
             <p className="text-xs text-slate-400 leading-relaxed mb-4">
               Apakah Anda yakin ingin menyelesaikan ujian? Setelah diserahkan, Anda tidak dapat mengubah jawaban lagi.
             </p>
+
+            {submitError && (
+              <div className="mb-4 p-3 rounded-lg bg-rose-500/20 border border-rose-500/40 text-xs text-rose-200">
+                {submitError}
+              </div>
+            )}
 
             <div className="bg-slate-800/80 border border-slate-700/80 p-4 rounded-xl space-y-2 text-xs mb-5">
               <div className="flex justify-between">

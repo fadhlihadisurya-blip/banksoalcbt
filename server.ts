@@ -1507,6 +1507,67 @@ app.get('/api/student/exams', (req, res) => {
   res.json({ exams: availableExams });
 });
 
+// List completed exam results for a single student (scores masked when unpublished)
+app.get('/api/student/results', (req, res) => {
+  const { studentId } = req.query;
+  if (!studentId || typeof studentId !== 'string') {
+    return res.status(400).json({ error: 'studentId wajib disertakan.' });
+  }
+
+  const rawResults: any[] = Object.values(db.examResults || {}).filter(
+    (r: any) => r.studentId === studentId
+  );
+
+  const results = rawResults
+    .map((r: any) => {
+      const exam = db.exams.find((e: any) => e.id === r.examId);
+      const isPublished = Boolean(exam?.isPublishedResults);
+      return {
+        id: r.id,
+        examId: r.examId,
+        examTitle: exam?.title || 'Ujian Sekolah',
+        studentId: r.studentId,
+        studentName: r.studentName || '-',
+        studentNis: r.studentNis || '-',
+        className: r.className || '-',
+        completedAt: r.completedAt || '',
+        correctCount: Number(r.correctCount) || 0,
+        wrongCount: Number(r.wrongCount) || 0,
+        emptyCount: Number(r.emptyCount) || 0,
+        totalQuestions: Number(r.totalQuestions) || 0,
+        isPublishedResults: isPublished,
+        finalScore: isPublished ? (r.finalScore ?? 0) : null,
+      };
+    })
+    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
+
+  const publishedScores = results
+    .filter((r) => r.isPublishedResults && typeof r.finalScore === 'number')
+    .map((r) => r.finalScore as number);
+
+  const hasHiddenScores = results.some((r) => !r.isPublishedResults);
+  const sorted = [...publishedScores].sort((a, b) => a - b);
+
+  const stats =
+    results.length === 0
+      ? { totalCompleted: 0, hasHiddenScores: false, average: 0, highest: 0, lowest: 0, median: 0 }
+      : publishedScores.length === 0
+      ? { totalCompleted: results.length, hasHiddenScores: true, average: null, highest: null, lowest: null, median: null }
+      : {
+          totalCompleted: results.length,
+          hasHiddenScores,
+          average: Math.round(publishedScores.reduce((a, b) => a + b, 0) / publishedScores.length),
+          highest: Math.max(...publishedScores),
+          lowest: Math.min(...publishedScores),
+          median:
+            sorted.length % 2 === 0
+              ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+              : sorted[Math.floor(sorted.length / 2)],
+        };
+
+  res.json({ results, stats });
+});
+
 // Student starts exam: validates token, class, time window, generates/recovers package
 app.post('/api/exams/:id/start', async (req, res) => {
   const { id: examId } = req.params;

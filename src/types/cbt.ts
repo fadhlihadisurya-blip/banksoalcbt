@@ -279,6 +279,35 @@ export interface ExamResultItem {
   violationsRecorded: ViolationEntry[];
 }
 
+export interface StudentResultItem {
+  id: string;
+  examId: string;
+  examTitle: string;
+  studentId: string;
+  studentName: string;
+  studentNis: string;
+  className: string;
+  completedAt: string;
+  correctCount: number;
+  wrongCount: number;
+  emptyCount: number;
+  totalQuestions: number;
+  isPublishedResults: boolean;
+  finalScore: number | null;
+}
+
+export interface StudentResultsPayload {
+  results: StudentResultItem[];
+  stats: {
+    totalCompleted: number;
+    hasHiddenScores: boolean;
+    average: number | null;
+    highest: number | null;
+    lowest: number | null;
+    median: number | null;
+  };
+}
+
 export interface AIIndividualAnalytics {
   summary: string;
   masteredTopics: string[];

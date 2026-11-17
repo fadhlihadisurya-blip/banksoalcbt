@@ -212,7 +212,8 @@ export const RichQuestionEditor: React.FC<RichQuestionEditorProps> = ({
     try {
       const { html } = await processClipboardPaste(e.clipboardData);
       if (html) {
-        insertHtmlAtCursor(html);
+        const paddedHtml = /<\/math>\s*$/i.test(html) ? `${html}&nbsp;` : html;
+        insertHtmlAtCursor(paddedHtml);
       }
     } catch (err) {
       console.error('Paste processing error:', err);
