@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { AppLayout, NavTab } from './components/layout/AppLayout';
@@ -19,6 +19,11 @@ import { SchoolSettingsView } from './components/admin/SchoolSettingsView';
 import { ExamTakingView } from './components/exam/ExamTakingView';
 import { Exam, ExamSession, StudentQuestionItem } from './types/cbt';
 import { api } from './lib/api';
+import {
+  incrementStudentClick,
+  incrementStudentLoading,
+  incrementStudentSave,
+} from './lib/studentActivityCounter';
 
 function MainApp() {
   const { user, loading } = useAuth();
@@ -46,6 +51,18 @@ function MainApp() {
     questions: StudentQuestionItem[];
     examMeta: any;
   } | null>(null);
+
+  useEffect(() => {
+    if (user?.role !== 'student' || !user?.id) return;
+    const studentId = user.id;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-skip-click-count="true"]')) return;
+      incrementStudentClick(studentId);
+    };
+    window.addEventListener('click', handleClick, true);
+    return () => window.removeEventListener('click', handleClick, true);
+  }, [user?.id, user?.role]);
 
   if (loading) {
     return (
@@ -81,9 +98,14 @@ function MainApp() {
 
   // Student starts exam
   const handleStartExam = async (examId: string, inputToken?: string): Promise<void> => {
+    incrementStudentLoading(user.id);
     const res = await api.startExam(examId, user.id, inputToken);
     if (!res || !res.session || !Array.isArray(res.questions) || !res.exam) {
       throw new Error('Gagal memuat paket soal ujian. Silakan coba lagi.');
+    }
+    const startedMs = res.session.startedAt ? new Date(res.session.startedAt).getTime() : 0;
+    if (startedMs && Date.now() - startedMs < 15000) {
+      incrementStudentSave(user.id);
     }
     setActiveExamSession({
       examId,

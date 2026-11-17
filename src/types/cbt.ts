@@ -171,6 +171,7 @@ export interface StudentExamInfo {
   hasResult: boolean;
   score: number | null;
   kktpScore: number;
+  violationCount?: number;
 }
 
 export interface ViolationEntry {

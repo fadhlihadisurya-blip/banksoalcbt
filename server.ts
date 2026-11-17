@@ -1497,10 +1497,20 @@ app.get('/api/student/exams', (req, res) => {
         isTokenActive: e.isTokenActive,
         isPublishedResults: e.isPublishedResults,
         // Status for this student
-        studentStatus: result ? 'completed' : session ? session.status : 'not_started',
+        studentStatus: result
+          ? 'completed'
+          : session
+          ? session.status === 'suspicious'
+            ? 'in_progress'
+            : session.status
+          : 'not_started',
         hasResult: !!result,
         score: (e.isPublishedResults && result) ? result.finalScore : null,
         kktpScore: e.kktpScore,
+        violationCount: Number(
+          session?.violationCount ??
+            (Array.isArray(result?.violationsRecorded) ? result.violationsRecorded.length : 0)
+        ) || 0,
       };
     });
 

@@ -756,10 +756,21 @@ export const firestoreStore = {
             scheduleEnd: e.scheduleEnd,
             isTokenActive: Boolean(e.isTokenActive),
             isPublishedResults: Boolean(e.isPublishedResults),
-            studentStatus: result ? 'completed' : session ? session.status : 'not_started',
+            studentStatus: result
+              ? 'completed'
+              : session
+              ? session.status === 'suspicious'
+                ? 'in_progress'
+                : session.status
+              : 'not_started',
             hasResult: Boolean(result),
             score: e.isPublishedResults && result ? result.finalScore : null,
             kktpScore: e.kktpScore,
+            violationCount:
+              Number(
+                session?.violationCount ??
+                  (Array.isArray(result?.violationsRecorded) ? result.violationsRecorded.length : 0)
+              ) || 0,
           };
         });
 

@@ -14,9 +14,15 @@ import {
   Send,
   Save,
   Check,
+  MousePointerClick,
+  Loader2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { RichContent } from '../common/RichContent';
+import {
+  incrementStudentSave,
+  useStudentActivityCounters,
+} from '../../lib/studentActivityCounter';
 
 interface ExamTakingViewProps {
   examId: string;
@@ -59,6 +65,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
   const [submitError, setSubmitError] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<'saved' | 'saving'>('saved');
+  const [violationCount, setViolationCount] = useState<number>(
+    Number(initialSession?.violationCount) || 0
+  );
+  const activityCounters = useStudentActivityCounters(user?.id);
 
   // Anti-cheating warnings
   const [warningModal, setWarningModal] = useState<{
@@ -112,6 +122,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     if (!user?.id) return;
     try {
       const res = await api.recordViolation(examId, user.id, type, desc);
+      incrementStudentSave(user.id);
+      setViolationCount((prev) =>
+        typeof res.violationCount === 'number' ? res.violationCount : prev + 1
+      );
       const level = res.level || 1;
 
       let title = 'Peringatan Pelanggaran';
@@ -224,6 +238,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           currentQuestionIndex: currentIndexRef.current,
           remainingSeconds: remainingSecondsRef.current,
         });
+        incrementStudentSave(user.id);
         setAutosaveStatus('saved');
       } catch (err) {
         console.error('Autosave error:', err);
@@ -248,6 +263,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           currentQuestionIndex: currentIndex,
           remainingSeconds,
         });
+        incrementStudentSave(user.id);
         setAutosaveStatus('saved');
       } catch (err) {
         console.error(err);
@@ -259,7 +275,14 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     const updated = { ...doubtfulFlags, [questionId]: !doubtfulFlags[questionId] };
     setDoubtfulFlags(updated);
     if (user?.id) {
-      api.autosaveExam(examId, user.id, { doubtfulFlags: updated });
+      setAutosaveStatus('saving');
+      try {
+        await api.autosaveExam(examId, user.id, { doubtfulFlags: updated });
+        incrementStudentSave(user.id);
+        setAutosaveStatus('saved');
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -270,6 +293,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     setSubmitError('');
     try {
       await api.submitExam(examId, user.id, answersRef.current);
+      incrementStudentSave(user.id);
       confetti({
         particleCount: 100,
         spread: 70,
@@ -359,11 +383,53 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           </div>
         </div>
 
-        {/* Timer & Autosave Status */}
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
+        {/* Timer, Violations, Counter Click & Autosave Status */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400">
             <Save className={`w-3.5 h-3.5 ${autosaveStatus === 'saving' ? 'text-amber-400 animate-spin' : 'text-emerald-400'}`} />
             <span>{autosaveStatus === 'saving' ? 'Menyimpan...' : 'Tersimpan otomatis'}</span>
+          </div>
+
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-mono text-xs font-bold border tabular-nums ${
+              violationCount >= 2
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50'
+                : violationCount === 1
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                : 'bg-slate-800 text-slate-300 border-slate-700'
+            }`}
+            title="Jumlah pelanggaran yang sudah tercatat"
+          >
+            <ShieldAlert
+              className={`w-3.5 h-3.5 ${
+                violationCount >= 2
+                  ? 'text-rose-400'
+                  : violationCount === 1
+                  ? 'text-amber-400'
+                  : 'text-emerald-400'
+              }`}
+            />
+            <span>Pelanggaran: {violationCount}</span>
+          </div>
+
+          <div
+            className="hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] font-mono text-slate-300 tabular-nums"
+            title="Counter Click: jumlah klik, loading, dan save data"
+          >
+            <span className="flex items-center gap-1">
+              <MousePointerClick className="w-3 h-3 text-indigo-400" />
+              <span>Klik: {activityCounters.clickCount}</span>
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="flex items-center gap-1">
+              <Loader2 className="w-3 h-3 text-sky-400" />
+              <span>Load: {activityCounters.loadingCount}</span>
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="flex items-center gap-1">
+              <Save className="w-3 h-3 text-emerald-400" />
+              <span>Save: {activityCounters.saveCount}</span>
+            </span>
           </div>
 
           <div
@@ -378,6 +444,16 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Mobile compact bar for Counter Click */}
+      <div className="md:hidden bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-slate-300 tabular-nums shrink-0">
+        <span className="text-slate-400">Counter Click</span>
+        <div className="flex items-center gap-3">
+          <span>Klik: {activityCounters.clickCount}</span>
+          <span>Load: {activityCounters.loadingCount}</span>
+          <span>Save: {activityCounters.saveCount}</span>
+        </div>
+      </div>
 
       {/* Main CBT Workspace: Split Screen Question & Number Map */}
       <div className="flex-1 flex overflow-hidden">
@@ -666,6 +742,41 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded bg-slate-800 border border-slate-700" />
                 <span>Belum Dijawab ({unansweredCount})</span>
+              </div>
+            </div>
+
+            {/* Session Violation & Counter Click Summary */}
+            <div className="mt-4 pt-4 border-t border-slate-800 space-y-2 text-xs">
+              <div className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">
+                Integritas &amp; Counter Click
+              </div>
+              <div className="bg-slate-800/70 border border-slate-700/80 rounded-xl p-3 space-y-1.5 font-mono tabular-nums text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-sans">Pelanggaran Tercatat</span>
+                  <span
+                    className={`font-bold ${
+                      violationCount >= 2
+                        ? 'text-rose-400'
+                        : violationCount === 1
+                        ? 'text-amber-400'
+                        : 'text-emerald-400'
+                    }`}
+                  >
+                    {violationCount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-sans">Jumlah Klik</span>
+                  <span className="font-bold text-indigo-300">{activityCounters.clickCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-sans">Loading Data</span>
+                  <span className="font-bold text-sky-300">{activityCounters.loadingCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-sans">Save Data</span>
+                  <span className="font-bold text-emerald-300">{activityCounters.saveCount}</span>
+                </div>
               </div>
             </div>
           </div>

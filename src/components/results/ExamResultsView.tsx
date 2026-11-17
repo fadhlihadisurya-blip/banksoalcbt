@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { Exam, ExamResultItem, StudentResultItem, StudentResultsPayload } from '../../types/cbt';
+import { incrementStudentLoading } from '../../lib/studentActivityCounter';
 import {
   Sparkles,
   Download,
@@ -70,6 +71,7 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
     try {
       setLoading(true);
       setErrorMessage('');
+      incrementStudentLoading(studentId);
       const data = await api.getStudentResults(studentId);
       setStudentData(data);
     } catch (err: any) {

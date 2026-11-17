@@ -4,7 +4,6 @@ import { useSettings } from '../../context/SettingsContext';
 import { api } from '../../lib/api';
 import { StudentExamInfo } from '../../types/cbt';
 import {
-  FileQuestion,
   Clock,
   KeyRound,
   CheckCircle,
@@ -14,7 +13,16 @@ import {
   AlertCircle,
   Calendar,
   Lock,
+  ShieldAlert,
+  MousePointerClick,
+  Loader2,
+  Save,
 } from 'lucide-react';
+import {
+  incrementStudentLoading,
+  resetStudentActivityCounters,
+  useStudentActivityCounters,
+} from '../../lib/studentActivityCounter';
 
 interface StudentDashboardProps {
   onStartExam: (examId: string, inputToken?: string) => Promise<void>;
@@ -32,6 +40,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
   const [actionError, setActionError] = useState('');
   const [startingExamId, setStartingExamId] = useState<string | null>(null);
   const [submittingToken, setSubmittingToken] = useState(false);
+  const activityCounters = useStudentActivityCounters(user?.id);
 
   useEffect(() => {
     if (user?.id) {
@@ -43,6 +52,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
     try {
       setLoading(true);
       if (!user?.id) return;
+      incrementStudentLoading(user.id);
       const [examsRes, classesRes] = await Promise.all([
         api.getStudentExams(user.id),
         api.getClasses().catch(() => ({ classes: [] })),
@@ -100,12 +110,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
     }
   };
 
+  const totalViolations = exams.reduce((sum, ex) => sum + (Number(ex.violationCount) || 0), 0);
+
   return (
     <div className="space-y-6">
       {/* Student Profile Card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white font-bold text-xl flex items-center justify-center shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white font-bold text-xl flex items-center justify-center shadow-xs shrink-0">
             {user?.name.charAt(0)}
           </div>
           <div>
@@ -123,11 +135,59 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
           </div>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs space-y-1">
-          <div className="text-slate-500">Status Integritas Siswa:</div>
-          <div className="font-semibold text-emerald-700 flex items-center gap-1.5">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Sesi Terdaftar & Aman</span>
+        <div className="flex flex-wrap items-stretch gap-3">
+          <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs space-y-1">
+            <div className="text-slate-500">Pelanggaran Tercatat:</div>
+            <div
+              className={`font-semibold flex items-center gap-1.5 ${
+                totalViolations >= 2
+                  ? 'text-rose-700'
+                  : totalViolations === 1
+                  ? 'text-amber-700'
+                  : 'text-emerald-700'
+              }`}
+            >
+              <ShieldAlert
+                className={`w-3.5 h-3.5 ${
+                  totalViolations >= 2
+                    ? 'text-rose-600'
+                    : totalViolations === 1
+                    ? 'text-amber-600'
+                    : 'text-emerald-600'
+                }`}
+              />
+              <span className="font-mono font-bold">{totalViolations}</span>
+              <span>{totalViolations === 0 ? '(Aman)' : 'Pelanggaran'}</span>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-slate-500 font-medium">Counter Click (Aktivitas Data):</span>
+              <button
+                type="button"
+                data-skip-click-count="true"
+                onClick={() => resetStudentActivityCounters(user?.id)}
+                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                title="Reset counter aktivitas"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 font-mono font-semibold text-slate-700">
+              <span className="flex items-center gap-1" title="Jumlah klik siswa">
+                <MousePointerClick className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Klik: {activityCounters.clickCount}</span>
+              </span>
+              <span className="flex items-center gap-1" title="Jumlah proses muat/loading data">
+                <Loader2 className="w-3.5 h-3.5 text-sky-600" />
+                <span>Loading: {activityCounters.loadingCount}</span>
+              </span>
+              <span className="flex items-center gap-1" title="Jumlah proses simpan/save data">
+                <Save className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Save: {activityCounters.saveCount}</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -221,6 +281,21 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                     <div className="flex items-center gap-2">
                       <Lock className="w-3.5 h-3.5 text-slate-400" />
                       <span>Token Ujian: {exam.isTokenActive ? 'Wajib Dimasukkan' : 'Terbuka'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert
+                        className={`w-3.5 h-3.5 ${(exam.violationCount || 0) > 0 ? 'text-rose-500' : 'text-slate-400'}`}
+                      />
+                      <span>
+                        Pelanggaran Tercatat:{' '}
+                        <strong
+                          className={`font-mono ${
+                            (exam.violationCount || 0) > 0 ? 'text-rose-600' : 'text-slate-700'
+                          }`}
+                        >
+                          {exam.violationCount || 0}
+                        </strong>
+                      </span>
                     </div>
                   </div>
                 </div>
