@@ -93,13 +93,19 @@ export async function loginWithEmailPassword(email: string, pass: string) {
         try {
           const newCred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
           return newCred.user;
-        } catch (createErr) {
-          // If creation fails, throw original authentication error
-          console.warn('Bootstrap creation skipped:', createErr);
+        } catch {
+          // Account already exists with a different password or creation is disallowed
         }
       }
     }
-    console.error('Firebase Email/Password Login Error:', err);
+    const code = err?.code || '';
+    if (
+      code !== 'auth/invalid-credential' &&
+      code !== 'auth/wrong-password' &&
+      code !== 'auth/user-not-found'
+    ) {
+      console.warn('Firebase Email/Password Login warning:', code || err?.message);
+    }
     throw err;
   }
 }

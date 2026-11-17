@@ -221,21 +221,26 @@ export const TaxonomyManagementView: React.FC = () => {
 
   const handleSubmitCompetency = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!competencyForm.subchapterId || !competencyForm.code || !competencyForm.description) return;
+    if (!competencyForm.subchapterId || !competencyForm.description.trim()) return;
     setSubmitting(true);
     setFeedback(null);
     try {
+      const payload = {
+        ...competencyForm,
+        code: competencyForm.code.trim(),
+        description: competencyForm.description.trim(),
+      };
       if (editingId) {
-        await api.updateCompetency(editingId, competencyForm);
-        setFeedback({ type: 'success', message: 'Kompetensi / Indikator berhasil diperbarui.' });
+        await api.updateCompetency(editingId, payload);
+        setFeedback({ type: 'success', message: 'Sub-Sub Bab berhasil diperbarui.' });
       } else {
-        await api.createCompetency(competencyForm);
-        setFeedback({ type: 'success', message: 'Indikator baru berhasil ditambahkan.' });
+        await api.createCompetency(payload);
+        setFeedback({ type: 'success', message: 'Sub-Sub Bab baru berhasil ditambahkan.' });
       }
       setModalType(null);
       await loadTaxonomy();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Gagal menyimpan Kompetensi.' });
+      setFeedback({ type: 'error', message: err.message || 'Gagal menyimpan Sub-Sub Bab.' });
     } finally {
       setSubmitting(false);
     }
@@ -278,7 +283,7 @@ export const TaxonomyManagementView: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs text-slate-500">
-            Kelola struktur hirarki Mata Pelajaran, Bab, Sub Bab, dan Indikator Kompetensi (IPK) untuk Bank Soal CBT.
+            Kelola struktur hirarki Mata Pelajaran, Bab, Sub Bab, dan Sub-Sub Bab untuk Bank Soal CBT.
           </p>
         </div>
 
@@ -344,7 +349,7 @@ export const TaxonomyManagementView: React.FC = () => {
           </div>
           <div>
             <div className="text-2xl font-bold text-slate-900">{competencies.length}</div>
-            <div className="text-xs text-slate-500 font-medium">Indikator (IPK)</div>
+            <div className="text-xs text-slate-500 font-medium">Sub-Sub Bab</div>
           </div>
         </div>
       </div>
@@ -397,7 +402,7 @@ export const TaxonomyManagementView: React.FC = () => {
             }`}
           >
             <FileCheck2 className="w-4 h-4" />
-            <span>4. Indikator / IPK ({competencies.length})</span>
+            <span>4. Sub-Sub Bab ({competencies.length})</span>
           </button>
         </div>
 
@@ -654,7 +659,7 @@ export const TaxonomyManagementView: React.FC = () => {
                     <th className="py-3 px-4">No</th>
                     <th className="py-3 px-4">Induk Bab</th>
                     <th className="py-3 px-4">Nama Sub Bab</th>
-                    <th className="py-3 px-4">Indikator IPK</th>
+                    <th className="py-3 px-4">Sub-Sub Bab</th>
                     <th className="py-3 px-4 text-center">Aksi</th>
                   </tr>
                 </thead>
@@ -671,7 +676,7 @@ export const TaxonomyManagementView: React.FC = () => {
                           <td className="py-3 px-4 font-semibold text-slate-900">{sc.name}</td>
                           <td className="py-3 px-4">
                             <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-[11px]">
-                              {cmpCount} Indikator
+                              {cmpCount} Sub-Sub Bab
                             </span>
                           </td>
                           <td className="py-3 px-4 text-center">
@@ -762,7 +767,7 @@ export const TaxonomyManagementView: React.FC = () => {
                   <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Cari kode KD atau deskripsi..."
+                    placeholder="Cari kode atau nama Sub-Sub Bab..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -775,7 +780,7 @@ export const TaxonomyManagementView: React.FC = () => {
                 className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors shrink-0"
               >
                 <Plus className="w-4 h-4" />
-                <span>Tambah Indikator / IPK</span>
+                <span>Tambah Sub-Sub Bab</span>
               </button>
             </div>
 
@@ -784,8 +789,8 @@ export const TaxonomyManagementView: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">No</th>
-                    <th className="py-3 px-4">Kode KD</th>
-                    <th className="py-3 px-4">Deskripsi Kompetensi / IPK</th>
+                    <th className="py-3 px-4">Kode</th>
+                    <th className="py-3 px-4">Nama Sub-Sub Bab</th>
                     <th className="py-3 px-4">Sub Bab</th>
                     <th className="py-3 px-4 text-center">Aksi</th>
                   </tr>
@@ -794,15 +799,15 @@ export const TaxonomyManagementView: React.FC = () => {
                   {filteredCompetencies
                     .filter(
                       (cmp) =>
-                        cmp.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        cmp.description.toLowerCase().includes(searchTerm.toLowerCase())
+                        (cmp.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (cmp.description || '').toLowerCase().includes(searchTerm.toLowerCase())
                     )
                     .map((cmp, idx) => {
                       const sc = subchapters.find((s) => s.id === cmp.subchapterId);
                       return (
                         <tr key={cmp.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3 px-4 font-medium text-slate-400">{idx + 1}</td>
-                          <td className="py-3 px-4 font-mono font-bold text-indigo-600">{cmp.code}</td>
+                          <td className="py-3 px-4 font-mono font-bold text-indigo-600">{cmp.code || '-'}</td>
                           <td className="py-3 px-4 font-medium text-slate-900 max-w-md">
                             {cmp.description}
                           </td>
@@ -812,7 +817,7 @@ export const TaxonomyManagementView: React.FC = () => {
                               <button
                                 onClick={() => handleOpenEditCompetency(cmp)}
                                 className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                title="Edit Indikator"
+                                title="Edit Sub-Sub Bab"
                               >
                                 <Pencil className="w-4 h-4" />
                               </button>
@@ -821,11 +826,11 @@ export const TaxonomyManagementView: React.FC = () => {
                                   setDeleteTarget({
                                     type: 'competencies',
                                     id: cmp.id,
-                                    name: `${cmp.code} - ${cmp.description}`,
+                                    name: cmp.code ? `${cmp.code} - ${cmp.description}` : cmp.description,
                                   })
                                 }
                                 className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                title="Hapus Indikator"
+                                title="Hapus Sub-Sub Bab"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1043,13 +1048,13 @@ export const TaxonomyManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Competency */}
+      {/* Modal: Sub-Sub Bab */}
       {modalType === 'competencies' && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-base font-bold text-slate-900">
-                {editingId ? 'Edit Indikator / IPK' : 'Tambah Indikator / IPK Baru'}
+                {editingId ? 'Edit Sub-Sub Bab' : 'Tambah Sub-Sub Bab Baru'}
               </h3>
               <button onClick={() => setModalType(null)} className="p-1 text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -1082,12 +1087,11 @@ export const TaxonomyManagementView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Kode Kompetensi / KD <span className="text-rose-500">*</span>
+                  Kode Sub-Sub Bab <span className="text-slate-400 font-normal">(Opsional)</span>
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="Contoh: KD 3.6.1"
+                  placeholder="Contoh: 1.1.1"
                   value={competencyForm.code}
                   onChange={(e) => setCompetencyForm({ ...competencyForm, code: e.target.value })}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500"
@@ -1096,12 +1100,12 @@ export const TaxonomyManagementView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Deskripsi Indikator / IPK <span className="text-rose-500">*</span>
+                  Nama Sub-Sub Bab <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   required
                   rows={3}
-                  placeholder="Deskripsi pencapaian kompetensi..."
+                  placeholder="Masukkan nama atau rincian Sub-Sub Bab..."
                   value={competencyForm.description}
                   onChange={(e) => setCompetencyForm({ ...competencyForm, description: e.target.value })}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500"
@@ -1121,7 +1125,7 @@ export const TaxonomyManagementView: React.FC = () => {
                   disabled={submitting}
                   className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50"
                 >
-                  {submitting ? 'Menyimpan...' : editingId ? 'Simpan Perubahan' : 'Tambah Indikator'}
+                  {submitting ? 'Menyimpan...' : editingId ? 'Simpan Perubahan' : 'Tambah Sub-Sub Bab'}
                 </button>
               </div>
             </form>

@@ -151,6 +151,8 @@ function MainApp() {
               }}
             />
           );
+        case 'classes':
+          return <ClassManagementView />;
         case 'bank':
           return <QuestionBankView />;
         case 'exams':

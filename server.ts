@@ -8,127 +8,191 @@ import { GoogleGenAI } from '@google/genai';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
+import {
+  assignMissingQuestionCodes,
+  generateNextQuestionCode,
+  getSubjectCodePrefix,
+  isQuestionCodeDuplicate,
+} from './src/lib/questionCode';
+import { generateRandomPassword } from './src/lib/passwordUtils';
+import { computeLiveStudentScore } from './src/lib/liveScore';
+import {
+  isQuestionInExamScope,
+  questionMatchesScopeUnit,
+  evaluateScopeAvailability,
+} from './src/lib/examPool';
 
 dotenv.config();
 
 const firebaseApp = initializeApp(firebaseConfig);
 const firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
+let lastFirestoreSyncAt = 0;
+let firestoreLoadPromise: Promise<void> | null = null;
+let pendingWrites = 0;
+
+function stripTaxonomyMeta(docData: any) {
+  const copy = { ...docData };
+  delete copy.type;
+  return copy;
+}
+
 async function loadFromFirestore() {
   try {
     if (!firestoreDb) return;
-    const usersSnap = await getDocs(collection(firestoreDb, 'users'));
-    if (!usersSnap.empty) {
-      const fsUsers = usersSnap.docs.map((d) => d.data());
-      const userMap = new Map();
-      for (const u of db.users || []) userMap.set(u.id, u);
-      for (const fsu of fsUsers) {
-        const existing = userMap.get(fsu.id);
-        userMap.set(fsu.id, {
-          ...fsu,
-          passwordHash: existing?.passwordHash || fsu.passwordHash || hashPassword('siswa123'),
-        });
+
+    const existingUsersById = new Map<string, any>();
+    for (const u of db?.users || []) {
+      if (u?.id) existingUsersById.set(u.id, u);
+    }
+
+    const [
+      usersSnap,
+      classesSnap,
+      questionsSnap,
+      examsSnap,
+      taxonomySnap,
+      settingsSnap,
+      sessionsSnap,
+      resultsSnap,
+      logsSnap,
+    ] = await Promise.all([
+      getDocs(collection(firestoreDb, 'users')),
+      getDocs(collection(firestoreDb, 'classes')),
+      getDocs(collection(firestoreDb, 'questions')),
+      getDocs(collection(firestoreDb, 'exams')),
+      getDocs(collection(firestoreDb, 'taxonomy')),
+      getDocs(collection(firestoreDb, 'settings')),
+      getDocs(collection(firestoreDb, 'exam_sessions')),
+      getDocs(collection(firestoreDb, 'exam_results')),
+      getDocs(collection(firestoreDb, 'activity_logs')),
+    ]);
+
+    db.users = usersSnap.docs.map((d) => {
+      const fsu = d.data();
+      const existing = existingUsersById.get(fsu.id || d.id);
+      const roleDefaultPass =
+        fsu.role === 'admin' ? 'admin123' : fsu.role === 'teacher' ? 'guru123' : 'siswa123';
+      return {
+        ...fsu,
+        id: fsu.id || d.id,
+        passwordHash:
+          fsu.passwordHash ||
+          (fsu.plainPassword ? hashPassword(String(fsu.plainPassword).trim()) : '') ||
+          existing?.passwordHash ||
+          hashPassword(roleDefaultPass),
+      };
+    });
+
+    db.classes = classesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    db.questions = questionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    db.exams = examsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const taxItems = taxonomySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    db.subjects = taxItems.filter((i: any) => i.type === 'subject').map(stripTaxonomyMeta);
+    db.chapters = taxItems.filter((i: any) => i.type === 'chapter').map(stripTaxonomyMeta);
+    db.subchapters = taxItems.filter((i: any) => i.type === 'subchapter').map(stripTaxonomyMeta);
+    db.competencies = taxItems.filter((i: any) => i.type === 'competency').map(stripTaxonomyMeta);
+
+    const codeSync = assignMissingQuestionCodes(db.questions, db.subjects || []);
+    db.questions = codeSync.questions;
+    if (codeSync.updatedQuestions.length > 0) {
+      for (const updatedQ of codeSync.updatedQuestions) {
+        if (updatedQ.id) {
+          await persistDocToFirestore('questions', updatedQ.id, { code: updatedQ.code });
+        }
       }
-      db.users = Array.from(userMap.values());
+      saveDatabase();
     }
 
-    const classesSnap = await getDocs(collection(firestoreDb, 'classes'));
-    if (!classesSnap.empty) {
-      db.classes = classesSnap.docs.map((d) => d.data());
+    const sDoc = settingsSnap.docs.find((d) => d.id === 'school_info');
+    if (sDoc) {
+      db.settings = { ...createEmptyDatabase().settings, ...sDoc.data() };
+    } else {
+      db.settings = { ...createEmptyDatabase().settings };
     }
 
-    const questionsSnap = await getDocs(collection(firestoreDb, 'questions'));
-    if (!questionsSnap.empty) {
-      db.questions = questionsSnap.docs.map((d) => d.data());
+    const sessionsObj: Record<string, any> = {};
+    for (const sDocItem of sessionsSnap.docs) {
+      sessionsObj[sDocItem.id] = sDocItem.data();
     }
+    db.examSessions = sessionsObj;
 
-    const examsSnap = await getDocs(collection(firestoreDb, 'exams'));
-    if (!examsSnap.empty) {
-      db.exams = examsSnap.docs.map((d) => d.data());
+    const resultsObj: Record<string, any> = {};
+    for (const rDocItem of resultsSnap.docs) {
+      resultsObj[rDocItem.id] = rDocItem.data();
     }
+    db.examResults = resultsObj;
 
-    const settingsSnap = await getDocs(collection(firestoreDb, 'settings'));
-    if (!settingsSnap.empty) {
-      const sDoc = settingsSnap.docs.find((d) => d.id === 'school_info');
-      if (sDoc) {
-        db.settings = { ...db.settings, ...sDoc.data() };
-      }
-    }
+    db.activityLogs = logsSnap.docs
+      .map((d) => d.data())
+      .sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
 
-    console.log('[Server Firestore Sync] Data sinkronisasi berhasil dimuat langsung dari Cloud Firestore.');
+    lastFirestoreSyncAt = Date.now();
+    console.log(
+      `[Server Firestore Sync] Dimuat dari Firestore: ${db.users.length} users, ${db.classes.length} classes, ${db.questions.length} questions, ${db.exams.length} exams.`
+    );
   } catch (err) {
     console.warn('[Server Firestore Load Warning]:', err);
   }
 }
 
-async function syncToFirestore() {
-  if (!firestoreDb) return;
-  
-  if (db.users && Array.isArray(db.users)) {
-    for (const u of db.users) {
-      if (u.id) {
-        try {
-          const copy = { ...u };
-          delete copy.passwordHash;
-          await setDoc(doc(firestoreDb, 'users', u.id), copy, { merge: true });
-        } catch (e) {
-          console.warn(`[Firestore Sync] Skipped user ${u.id}:`, e);
-        }
-      }
-    }
+async function ensureFirestoreLoaded(forceRefresh = false) {
+  if (!firestoreLoadPromise) {
+    firestoreLoadPromise = loadFromFirestore();
   }
-
-  if (db.classes && Array.isArray(db.classes)) {
-    for (const c of db.classes) {
-      if (c.id) {
-        try {
-          await setDoc(doc(firestoreDb, 'classes', c.id), c, { merge: true });
-        } catch (e) {
-          console.warn(`[Firestore Sync] Skipped class ${c.id}:`, e);
-        }
-      }
-    }
-  }
-
-  if (db.questions && Array.isArray(db.questions)) {
-    for (const q of db.questions) {
-      if (q.id) {
-        try {
-          await setDoc(doc(firestoreDb, 'questions', q.id), q, { merge: true });
-        } catch (e) {
-          console.warn(`[Firestore Sync] Skipped question ${q.id}:`, e);
-        }
-      }
-    }
-  }
-
-  if (db.exams && Array.isArray(db.exams)) {
-    for (const ex of db.exams) {
-      if (ex.id) {
-        try {
-          await setDoc(doc(firestoreDb, 'exams', ex.id), ex, { merge: true });
-        } catch (e) {
-          console.warn(`[Firestore Sync] Skipped exam ${ex.id}:`, e);
-        }
-      }
-    }
-  }
-
-  if (db.settings) {
-    try {
-      await setDoc(doc(firestoreDb, 'settings', 'school_info'), db.settings, { merge: true });
-    } catch (e) {
-      console.warn('[Firestore Sync] Skipped settings:', e);
-    }
+  await firestoreLoadPromise;
+  if (forceRefresh && pendingWrites === 0 && Date.now() - lastFirestoreSyncAt > 5000) {
+    firestoreLoadPromise = loadFromFirestore();
+    await firestoreLoadPromise;
   }
 }
 
+async function persistDocToFirestore(colName: string, docId: string, data: any) {
+  if (!firestoreDb || !docId) return;
+  pendingWrites++;
+  try {
+    const clean = { ...data };
+    delete clean.passwordHash;
+    await setDoc(doc(firestoreDb, colName, docId), clean, { merge: true });
+    lastFirestoreSyncAt = Date.now();
+  } catch (e) {
+    console.warn(`[Firestore Sync] Gagal menyimpan ${colName}/${docId}:`, e);
+  } finally {
+    pendingWrites = Math.max(0, pendingWrites - 1);
+  }
+}
+
+async function deleteDocFromFirestore(colName: string, docId: string) {
+  if (!firestoreDb || !docId) return;
+  pendingWrites++;
+  try {
+    await deleteDoc(doc(firestoreDb, colName, docId));
+    lastFirestoreSyncAt = Date.now();
+  } catch (e) {
+    console.warn(`[Firestore Sync] Gagal menghapus ${colName}/${docId}:`, e);
+  } finally {
+    pendingWrites = Math.max(0, pendingWrites - 1);
+  }
+}
+
+async function deleteTaxonomyDocFromFirestore(type: string, id: string) {
+  if (!firestoreDb || !id) return;
+  await deleteDocFromFirestore('taxonomy', `${type}-${id}`);
+  await deleteDocFromFirestore('taxonomy', id);
+}
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Ensure every API request has Firestore data loaded (and refreshed when stale on GET)
+app.use('/api', async (req, _res, next) => {
+  await ensureFirestoreLoaded(req.method === 'GET');
+  next();
+});
 
 // Initialize Gemini SDK on server-side
 const ai = new GoogleGenAI({
@@ -140,547 +204,57 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Persistence directory and file
+// Local cache file path (unused on Vercel read-only filesystem)
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'cbt_database.json');
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
 
 // Password hashing utility
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + '_salt_cbt_sma_2026').digest('hex');
 }
 
-// Seed data generator for high school CBT
-function generateInitialDatabase() {
-  const adminPassword = hashPassword('admin123');
-  const teacherPassword = hashPassword('guru123');
-  const studentPassword = hashPassword('siswa123');
-
-  const users = [
-    {
-      id: 'usr-admin-1',
-      username: 'admin',
-      passwordHash: adminPassword,
-      name: 'Drs. Hendro Wibowo, M.Pd.',
-      role: 'admin',
-      email: 'admin@sman1prestasi.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-teacher-1',
-      username: 'guru',
-      passwordHash: teacherPassword,
-      name: 'Ahmad Fauzi, S.Pd., M.Si.',
-      role: 'teacher',
-      email: 'ahmad.fauzi@sman1prestasi.sch.id',
-      nip: '198403152009021004',
-      subjectSpecialty: 'Fisika & Matematika IPA',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-teacher-2',
-      username: 'gurubio',
-      passwordHash: teacherPassword,
-      name: 'Dra. Sri Wahyuni, M.Biotech',
-      role: 'teacher',
-      email: 'sri.wahyuni@sman1prestasi.sch.id',
-      nip: '197908122005012003',
-      subjectSpecialty: 'Biologi SMA',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-student-1',
-      username: 'siswa1',
-      passwordHash: studentPassword,
-      name: 'Ahmad Rifai',
-      role: 'student',
-      nis: '20241001',
-      nisn: '0061234501',
-      classId: 'cls-xii-mipa-1',
-      gender: 'L',
-      email: 'rifai.ahmad@siswa.sman1.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-student-2',
-      username: 'siswa2',
-      passwordHash: studentPassword,
-      name: 'Siti Nur Aisyah',
-      role: 'student',
-      nis: '20241002',
-      nisn: '0061234502',
-      classId: 'cls-xii-mipa-1',
-      gender: 'P',
-      email: 'siti.aisyah@siswa.sman1.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-student-3',
-      username: 'siswa3',
-      passwordHash: studentPassword,
-      name: 'Bintang Pratama',
-      role: 'student',
-      nis: '20241003',
-      nisn: '0061234503',
-      classId: 'cls-xii-mipa-1',
-      gender: 'L',
-      email: 'bintang.pratama@siswa.sman1.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-student-4',
-      username: 'siswa4',
-      passwordHash: studentPassword,
-      name: 'Nabila Zahra',
-      role: 'student',
-      nis: '20241004',
-      nisn: '0061234504',
-      classId: 'cls-xii-mipa-1',
-      gender: 'P',
-      email: 'nabila.zahra@siswa.sman1.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-student-5',
-      username: 'siswa5',
-      passwordHash: studentPassword,
-      name: 'Dimas Arya Putra',
-      role: 'student',
-      nis: '20241005',
-      nisn: '0061234505',
-      classId: 'cls-xii-mipa-2',
-      gender: 'L',
-      email: 'dimas.arya@siswa.sman1.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'usr-student-6',
-      username: 'siswa6',
-      passwordHash: studentPassword,
-      name: 'Farhan Maulana',
-      role: 'student',
-      nis: '20241006',
-      nisn: '0061234506',
-      classId: 'cls-xii-mipa-2',
-      gender: 'L',
-      email: 'farhan.m@siswa.sman1.sch.id',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-  ];
-
-  const academicYears = [
-    { id: 'ay-2024-genap', name: '2024/2025', semester: 'Genap', isActive: true },
-    { id: 'ay-2024-ganjil', name: '2024/2025', semester: 'Ganjil', isActive: false },
-  ];
-
-  const classes = [
-    { id: 'cls-x-1', gradeLevel: 'X', name: 'X-1 (Fase E)', academicYearId: 'ay-2024-genap', homeroomTeacher: 'Siti Rahma, S.Pd.' },
-    { id: 'cls-xi-f1', gradeLevel: 'XI', name: 'XI-F1 (Fase F MIPA)', academicYearId: 'ay-2024-genap', homeroomTeacher: 'Bambang Sudibyo, M.Pd.' },
-    { id: 'cls-xii-mipa-1', gradeLevel: 'XII', name: 'XII MIPA 1', academicYearId: 'ay-2024-genap', homeroomTeacher: 'Ahmad Fauzi, S.Pd., M.Si.' },
-    { id: 'cls-xii-mipa-2', gradeLevel: 'XII', name: 'XII MIPA 2', academicYearId: 'ay-2024-genap', homeroomTeacher: 'Dra. Sri Wahyuni, M.Biotech' },
-    { id: 'cls-xii-ips-1', gradeLevel: 'XII', name: 'XII IPS 1', academicYearId: 'ay-2024-genap', homeroomTeacher: 'Drs. H. Mulyadi' },
-  ];
-
-  const subjects = [
-    { id: 'sbj-fisika', name: 'Fisika', code: 'FIS-SMA-XII' },
-    { id: 'sbj-biologi', name: 'Biologi', code: 'BIO-SMA-XII' },
-    { id: 'sbj-matematika', name: 'Matematika Peminatan', code: 'MAT-SMA-XII' },
-    { id: 'sbj-kimia', name: 'Kimia', code: 'KIM-SMA-XII' },
-  ];
-
-  const chapters = [
-    { id: 'ch-termo', subjectId: 'sbj-fisika', name: 'Termodinamika dan Hukum Gas Ideal' },
-    { id: 'ch-gelombang', subjectId: 'sbj-fisika', name: 'Gelombang Mekanik & Bunyi' },
-    { id: 'ch-genetika', subjectId: 'sbj-biologi', name: 'Hukum Mendel dan Pola Hereditas' },
-    { id: 'ch-kalkulus', subjectId: 'sbj-matematika', name: 'Turunan dan Integral Fungsi Trigonometri' },
-  ];
-
-  const subchapters = [
-    { id: 'sub-hukum1-termo', chapterId: 'ch-termo', name: 'Hukum I Termodinamika & Usaha Gas' },
-    { id: 'sub-siklus-carnot', chapterId: 'ch-termo', name: 'Siklus Carnot dan Efisiensi Mesin Kalor' },
-    { id: 'sub-entropi', chapterId: 'ch-termo', name: 'Entropi dan Hukum II Termodinamika' },
-    { id: 'sub-efek-doppler', chapterId: 'ch-gelombang', name: 'Efek Doppler dan Intensitas Bunyi' },
-    { id: 'sub-persilangan-dihibrid', chapterId: 'ch-genetika', name: 'Persilangan Monohibrid dan Dihibrid' },
-    { id: 'sub-turunan-trigo', chapterId: 'ch-kalkulus', name: 'Turunan Pertama dan Nilai Ekstrim Trigonometri' },
-  ];
-
-  const competencies = [
-    { id: 'cmp-3.6.1', subchapterId: 'sub-hukum1-termo', code: 'KD 3.6.1', description: 'Menghitung usaha yang dilakukan gas pada proses isobarik, isotermik, dan isokhorik' },
-    { id: 'cmp-3.6.2', subchapterId: 'sub-siklus-carnot', code: 'KD 3.6.2', description: 'Menganalisis prinsip kerja mesin Carnot dan menghitung efisiensi termal maksimum' },
-    { id: 'cmp-3.6.3', subchapterId: 'sub-entropi', code: 'KD 3.6.3', description: 'Mengevaluasi perubahan entropi sistem tertutup dan kelayakan proses termodinamika' },
-    { id: 'cmp-3.8.1', subchapterId: 'sub-efek-doppler', code: 'KD 3.8.1', description: 'Menganalisis pergeseran frekuensi bunyi akibat gerak relatif sumber dan pendengar' },
-    { id: 'cmp-3.5.1', subchapterId: 'sub-persilangan-dihibrid', code: 'KD 3.5.1', description: 'Menentukan rasio fenotip dan genotip F2 pada persilangan dihibrid dominan penuh' },
-  ];
-
-  // Authentic questions with LOTS, MOTS, HOTS across multiple question types
-  const questions = [
-    // 1. LOTS - Fisika
-    {
-      id: 'q-fis-01',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-termo',
-      subchapterId: 'sub-hukum1-termo',
-      competencyId: 'cmp-3.6.1',
-      cognitiveLevel: 'LOTS',
-      type: 'pg',
-      questionText: 'Pada proses termodinamika di mana volume sistem gas dijaga konstan (isokhorik), berapakah besar usaha (W) yang dilakukan oleh gas?',
-      options: [
-        { id: 'A', text: 'W = P · ΔV' },
-        { id: 'B', text: 'W = 0' },
-        { id: 'C', text: 'W = n · R · T · ln(V2/V1)' },
-        { id: 'D', text: 'W = Q - ΔU' },
-        { id: 'E', text: 'W = Tak hingga' },
-      ],
-      correctAnswer: 'B',
-      points: 10,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 2. MOTS - Fisika
-    {
-      id: 'q-fis-02',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-termo',
-      subchapterId: 'sub-hukum1-termo',
-      competencyId: 'cmp-3.6.1',
-      cognitiveLevel: 'MOTS',
-      type: 'pg',
-      questionText: 'Suatu gas ideal berada dalam ruang tertutup bertekanan tetap 2 × 10⁵ Pa. Jika gas dipanaskan sehingga memuai dari volume 1,5 m³ menjadi 2,5 m³, besar usaha yang dilakukan gas adalah ...',
-      options: [
-        { id: 'A', text: '1,0 × 10⁵ Joule' },
-        { id: 'B', text: '2,0 × 10⁵ Joule' },
-        { id: 'C', text: '3,0 × 10⁵ Joule' },
-        { id: 'D', text: '4,0 × 10⁵ Joule' },
-        { id: 'E', text: '5,0 × 10⁵ Joule' },
-      ],
-      correctAnswer: 'B',
-      points: 10,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 3. HOTS - Fisika (Complex Multiple Choice)
-    {
-      id: 'q-fis-03',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-termo',
-      subchapterId: 'sub-siklus-carnot',
-      competencyId: 'cmp-3.6.2',
-      cognitiveLevel: 'HOTS',
-      type: 'pg_kompleks',
-      questionText: 'Sebuah mesin pendingin Carnot beroperasi di antara tandon suhu tinggi T₁ = 300 K dan tandon suhu rendah T₂ = 240 K. Manakah pernyataan berikut yang BENAR terkait mesin tersebut? (Pilih semua yang sesuai)',
-      options: [
-        { id: 'A', text: 'Koefisien performansi (COP) mesin tersebut bernilai 4' },
-        { id: 'B', text: 'Jika suhu tandon rendah diturunkan menjadi 200 K, nilai COP akan meningkat' },
-        { id: 'C', text: 'Efisiensi termal mesin Carnot teoritis maksimum yang bekerja pada rentang suhu tersebut adalah 20%' },
-        { id: 'D', text: 'Mesin pendingin tersebut melanggar Hukum II Termodinamika karena memindahkan kalor ke tandon suhu tinggi' },
-      ],
-      correctAnswer: ['A', 'C'],
-      points: 15,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 4. HOTS - Fisika (True/False Matrix)
-    {
-      id: 'q-fis-04',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-termo',
-      subchapterId: 'sub-entropi',
-      competencyId: 'cmp-3.6.3',
-      cognitiveLevel: 'HOTS',
-      type: 'benar_salah',
-      questionText: 'Tentukan kebenaran dari pernyataan termodinamika berikut berdasarkan Hukum II Termodinamika:\n\n"Pada proses adiabatik ireversibel dalam sistem terisolasi, total entropi alam semesta selalu meningkat (ΔS > 0)."',
-      options: [
-        { id: 'true', text: 'BENAR' },
-        { id: 'false', text: 'SALAH' },
-      ],
-      correctAnswer: 'true',
-      points: 10,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 5. MOTS - Fisika
-    {
-      id: 'q-fis-05',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-termo',
-      subchapterId: 'sub-siklus-carnot',
-      competencyId: 'cmp-3.6.2',
-      cognitiveLevel: 'MOTS',
-      type: 'pg',
-      questionText: 'Suatu mesin kalor Carnot menyerap kalor sebesar 800 J dari tandon suhu tinggi 600 K dan membuang sebagian kalor ke tandon suhu rendah 300 K. Berapakah usaha yang dihasilkan oleh mesin dalam satu siklus?',
-      options: [
-        { id: 'A', text: '200 Joule' },
-        { id: 'B', text: '300 Joule' },
-        { id: 'C', text: '400 Joule' },
-        { id: 'D', text: '500 Joule' },
-        { id: 'E', text: '600 Joule' },
-      ],
-      correctAnswer: 'C',
-      points: 10,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 6. LOTS - Fisika
-    {
-      id: 'q-fis-06',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-gelombang',
-      subchapterId: 'sub-efek-doppler',
-      competencyId: 'cmp-3.8.1',
-      cognitiveLevel: 'LOTS',
-      type: 'pg',
-      questionText: 'Peristiwa perubahan frekuensi bunyi yang terdengar oleh pengamat akibat gerak relatif antara sumber bunyi dan pengamat dikenal sebagai fenomena ...',
-      options: [
-        { id: 'A', text: 'Difraksi Gelombang' },
-        { id: 'B', text: 'Interferensi Konstruktif' },
-        { id: 'C', text: 'Efek Doppler' },
-        { id: 'D', text: 'Polarisasi Bunyi' },
-        { id: 'E', text: 'Dispersi Akustik' },
-      ],
-      correctAnswer: 'C',
-      points: 10,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 7. MOTS - Fisika
-    {
-      id: 'q-fis-07',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-gelombang',
-      subchapterId: 'sub-efek-doppler',
-      competencyId: 'cmp-3.8.1',
-      cognitiveLevel: 'MOTS',
-      type: 'pg',
-      questionText: 'Sebuah mobil ambulans bergerak dengan kelajuan 20 m/s membunyikan sirine berfrekuensi 640 Hz mendekati seorang siswa yang diam di halte. Jika cepat rambat bunyi di udara 340 m/s, frekuensi sirine yang didengar oleh siswa adalah ...',
-      options: [
-        { id: 'A', text: '600 Hz' },
-        { id: 'B', text: '640 Hz' },
-        { id: 'C', text: '680 Hz' },
-        { id: 'D', text: '720 Hz' },
-        { id: 'E', text: '760 Hz' },
-      ],
-      correctAnswer: 'C',
-      points: 10,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 8. HOTS - Fisika (Esai)
-    {
-      id: 'q-fis-08',
-      subjectId: 'sbj-fisika',
-      chapterId: 'ch-termo',
-      subchapterId: 'sub-siklus-carnot',
-      competencyId: 'cmp-3.6.2',
-      cognitiveLevel: 'HOTS',
-      type: 'esai',
-      questionText: 'Sebuah pabrik pembangkit listrik tenaga uap (PLTU) berencana meningkatkan efisiensi turbin uapnya dari 35% menjadi 45%. Jelaskan minimal 2 strategi termodinamika realistis berdasarkan konsep Siklus Rankine/Carnot beserta konsekuensi teknis dan keselamatan sistemnya.',
-      rubric: 'Kriteria penilaian: 1. Penjelasan kenaikan suhu boiler / penurunan suhu kondensor (40%), 2. Analisis termal efisiensi (30%), 3. Konsekuensi teknis material tahan tekanan tinggi/korosi (30%).',
-      correctAnswer: 'Menaikkan temperatur uap masuk turbin (T1) dan menurunkan temperatur kondensor (T2) menggunakan pendingin air dan menara pendingin efisien, dengan memperhatikan batasan metalurgi turbin.',
-      points: 20,
-      status: 'active',
-      author: 'Ahmad Fauzi, S.Pd.',
-    },
-    // 9. Biologi - LOTS
-    {
-      id: 'q-bio-01',
-      subjectId: 'sbj-biologi',
-      chapterId: 'ch-genetika',
-      subchapterId: 'sub-persilangan-dihibrid',
-      competencyId: 'cmp-3.5.1',
-      cognitiveLevel: 'LOTS',
-      type: 'pg',
-      questionText: 'Pada persilangan monohibrid tanaman kacang ercis berbiji bulat (BB) dengan berbiji kisut (bb), jika sifat bulat dominan penuh terhadap kisut, maka fenotip keturunan F1 seluruhnya adalah ...',
-      options: [
-        { id: 'A', text: '100% Berbiji Bulat' },
-        { id: 'B', text: '100% Berbiji Kisut' },
-        { id: 'C', text: '50% Bulat, 50% Kisut' },
-        { id: 'D', text: '75% Bulat, 25% Kisut' },
-        { id: 'E', text: '25% Bulat, 75% Kisut' },
-      ],
-      correctAnswer: 'A',
-      points: 10,
-      status: 'active',
-      author: 'Dra. Sri Wahyuni',
-    },
-    // 10. Biologi - MOTS
-    {
-      id: 'q-bio-02',
-      subjectId: 'sbj-biologi',
-      chapterId: 'ch-genetika',
-      subchapterId: 'sub-persilangan-dihibrid',
-      competencyId: 'cmp-3.5.1',
-      cognitiveLevel: 'MOTS',
-      type: 'pg',
-      questionText: 'Pada persilangan dihibrid antara tanaman ercis berbiji bulat warna kuning heterozigot (BbKk) dengan sesamanya, peluang diperolehnya tanaman berbiji keriput warna hijau (bbkk) pada F2 adalah ...',
-      options: [
-        { id: 'A', text: '9/16' },
-        { id: 'B', text: '3/16' },
-        { id: 'C', text: '1/16' },
-        { id: 'D', text: '1/4' },
-        { id: 'E', text: '1/8' },
-      ],
-      correctAnswer: 'C',
-      points: 10,
-      status: 'active',
-      author: 'Dra. Sri Wahyuni',
-    },
-    // 11. Biologi - HOTS
-    {
-      id: 'q-bio-03',
-      subjectId: 'sbj-biologi',
-      chapterId: 'ch-genetika',
-      subchapterId: 'sub-persilangan-dihibrid',
-      competencyId: 'cmp-3.5.1',
-      cognitiveLevel: 'HOTS',
-      type: 'pg_kompleks',
-      questionText: 'Suatu eksperimen pemuliaan tanaman padi menghasilkan data keturunan F2 yang menyimpang dari rasio Mendel 9:3:3:1 menjadi 9:7. Manakah penjelasan biologis yang paling tepat mengenai fenomena ini? (Pilih semua jawaban benar)',
-      options: [
-        { id: 'A', text: 'Terjadi peristiwa interaksi antargen berupa komplementer' },
-        { id: 'B', text: 'Kedua gen dominan harus hadir bersama-sama agar sifat fenotip muncul' },
-        { id: 'C', text: 'Terjadi mutasi gen tunggal secara acak pada generasi F1' },
-        { id: 'D', text: 'Gen resesif homozigot pada salah satu lokus menghambat ekspresi fenotip' },
-      ],
-      correctAnswer: ['A', 'B', 'D'],
-      points: 15,
-      status: 'active',
-      author: 'Dra. Sri Wahyuni',
-    },
-  ];
-
-  // Demo active exam: Penilaian Akhir Semester (PAS) Fisika SMA Kelas XII
-  const exams = [
-    {
-      id: 'ex-fisika-xii-01',
-      title: 'Sumatif Akhir Semester: Fisika Terapan XII MIPA',
-      subjectId: 'sbj-fisika',
-      academicYearId: 'ay-2024-genap',
-      semester: 'Genap',
-      targetClassIds: ['cls-xii-mipa-1', 'cls-xii-mipa-2'],
-      scheduleStart: new Date(Date.now() - 3600000).toISOString(), // started 1 hour ago
-      scheduleEnd: new Date(Date.now() + 86400000).toISOString(), // ends tomorrow
-      durationMinutes: 90,
-      maxScore: 100,
-      kktpScore: 75,
-      selectedChapterIds: ['ch-termo', 'ch-gelombang'],
-      selectedSubchapterIds: ['sub-hukum1-termo', 'sub-siklus-carnot', 'sub-entropi', 'sub-efek-doppler'],
-      selectedCompetencyIds: ['cmp-3.6.1', 'cmp-3.6.2', 'cmp-3.6.3', 'cmp-3.8.1'],
-      cognitiveTarget: {
-        lotsCount: 2,
-        motsCount: 3,
-        hotsCount: 2,
-        totalQuestions: 7,
-      },
-      token: 'SMA7X9',
-      tokenAutoRotate: true,
-      tokenIntervalMinutes: 15,
-      tokenUpdatedAt: new Date().toISOString(),
-      isTokenActive: true,
-      antiCheating: {
-        forceFullscreen: true,
-        detectTabSwitch: true,
-        blockRightClick: true,
-        blockCopyPaste: true,
-        maxToleranceViolations: 3,
-        autoSubmitOnViolationLimit: false,
-      },
-      status: 'active',
-      isPublishedResults: true,
-      createdTeacherId: 'usr-teacher-1',
-      createdAt: new Date().toISOString(),
-    },
-  ];
-
-  // Pre-seed some exam question packages and sessions to showcase live monitoring & AI analytics
-  const examPackages: Record<string, any> = {};
-  const examSessions: Record<string, any> = {};
-  const examResults: Record<string, any> = {};
-
-  const settings = {
-    schoolName: 'SMAN 1 PRESTASI BANGSA',
-    schoolLogoUrl: '',
-    loginBackgroundUrl: '',
-    appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
-    academicYearText: '2024/2025 Genap',
-  };
-
+// Empty base schema (single source of truth is Cloud Firestore)
+function createEmptyDatabase() {
   return {
-    users,
-    academicYears,
-    classes,
-    subjects,
-    chapters,
-    subchapters,
-    competencies,
-    questions,
-    exams,
-    examPackages,
-    examSessions,
-    examResults,
-    settings,
-    activityLogs: [
-      {
-        id: 'log-1',
-        timestamp: new Date(Date.now() - 1800000).toISOString(),
-        actorName: 'Ahmad Fauzi, S.Pd.',
-        role: 'teacher',
-        action: 'CREATE_EXAM',
-        details: 'Membuat Ujian Sumatif Fisika XII MIPA (Token: SMA7X9)',
-      },
+    users: [] as any[],
+    academicYears: [
+      { id: 'ay-2024-genap', name: '2024/2025', semester: 'Genap', isActive: true },
+      { id: 'ay-2024-ganjil', name: '2024/2025', semester: 'Ganjil', isActive: false },
     ],
+    classes: [] as any[],
+    subjects: [] as any[],
+    chapters: [] as any[],
+    subchapters: [] as any[],
+    competencies: [] as any[],
+    questions: [] as any[],
+    exams: [] as any[],
+    examPackages: {} as Record<string, any>,
+    examSessions: {} as Record<string, any>,
+    examResults: {} as Record<string, any>,
+    settings: {
+      schoolName: '',
+      schoolLogoUrl: '',
+      loginBackgroundUrl: '',
+      appSubtitle: '',
+      academicYearText: '2024/2025 Genap',
+    },
+    activityLogs: [] as any[],
   };
 }
 
-// Database helper functions
-let db: any = null;
-
-function loadDatabase() {
-  if (!fs.existsSync(DB_FILE)) {
-    db = generateInitialDatabase();
-    saveDatabase();
-  } else {
-    try {
-      const content = fs.readFileSync(DB_FILE, 'utf-8');
-      db = JSON.parse(content);
-      if (!db.settings) {
-        db.settings = {
-          schoolName: 'SMAN 1 PRESTASI BANGSA',
-          schoolLogoUrl: '',
-          loginBackgroundUrl: '',
-          appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
-          academicYearText: '2024/2025 Genap',
-        };
-      }
-    } catch (err) {
-      console.error('Error loading db file, regenerating fresh database:', err);
-      db = generateInitialDatabase();
-      saveDatabase();
-    }
-  }
-}
+let db: any = createEmptyDatabase();
 
 function saveDatabase() {
+  if (process.env.VERCEL) return;
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
-    syncToFirestore().catch(() => {});
   } catch (err) {
-    console.error('Error saving database:', err);
+    console.warn('Local cache write skipped:', err);
   }
 }
-
-loadDatabase();
-loadFromFirestore().catch((err) => console.warn('[Server Firestore] Initial load skipped:', err));
 
 // -------------------------------------------------------------
 // HELPER: Randomization Algorithm
@@ -694,20 +268,22 @@ function generateRandomizedStudentPackage(examId: string, studentId: string) {
   const exam = db.exams.find((e: any) => e.id === examId);
   if (!exam) return null;
 
-  // Filter pool of active questions matching the exam criteria
-  let eligibleQuestions = db.questions.filter((q: any) => {
-    if (q.status !== 'active') return false;
-    if (q.subjectId !== exam.subjectId) return false;
-    if (exam.selectedChapterIds && exam.selectedChapterIds.length > 0) {
-      if (!exam.selectedChapterIds.includes(q.chapterId)) return false;
-    }
-    return true;
-  });
-
-  // Group by cognitive level
-  const lots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'LOTS');
-  const mots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'MOTS');
-  const hots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'HOTS');
+  // Filter pool of active questions matching the exam taxonomy scope (Bab / Sub Bab / Sub-Sub Bab)
+  let eligibleQuestions = db.questions.filter((q: any) =>
+    isQuestionInExamScope(
+      q,
+      {
+        subjectId: exam.subjectId,
+        selectedChapterIds: exam.selectedChapterIds,
+        selectedSubchapterIds: exam.selectedSubchapterIds,
+        selectedCompetencyIds: exam.selectedCompetencyIds,
+      },
+      {
+        subchapters: db.subchapters,
+        competencies: db.competencies,
+      }
+    )
+  );
 
   // Helper shuffle
   const shuffle = <T>(arr: T[]): T[] => {
@@ -720,14 +296,45 @@ function generateRandomizedStudentPackage(examId: string, studentId: string) {
   };
 
   const target = exam.cognitiveTarget || { lotsCount: 1, motsCount: 2, hotsCount: 1, totalQuestions: 4 };
+  let combined: any[] = [];
 
-  const pickedLots = shuffle(lots).slice(0, target.lotsCount || 1);
-  const pickedMots = shuffle(mots).slice(0, target.motsCount || 2);
-  const pickedHots = shuffle(hots).slice(0, target.hotsCount || 1);
+  if (Array.isArray(target.perScopeTargets) && target.perScopeTargets.length > 0) {
+    const usedIds = new Set<string>();
+    for (const unit of target.perScopeTargets) {
+      const unitPool: any[] = eligibleQuestions.filter(
+        (q: any) => !usedIds.has(q.id) && questionMatchesScopeUnit(q, unit)
+      );
+      const uLots = shuffle<any>(unitPool.filter((q: any) => q.cognitiveLevel === 'LOTS')).slice(
+        0,
+        Math.max(0, Number(unit.lotsCount) || 0)
+      );
+      const uMots = shuffle<any>(unitPool.filter((q: any) => q.cognitiveLevel === 'MOTS')).slice(
+        0,
+        Math.max(0, Number(unit.motsCount) || 0)
+      );
+      const uHots = shuffle<any>(unitPool.filter((q: any) => q.cognitiveLevel === 'HOTS')).slice(
+        0,
+        Math.max(0, Number(unit.hotsCount) || 0)
+      );
+      for (const picked of [...uLots, ...uMots, ...uHots]) {
+        usedIds.add(picked.id);
+        combined.push(picked);
+      }
+    }
+  } else {
+    // Legacy global sampling by cognitive level
+    const lots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'LOTS');
+    const mots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'MOTS');
+    const hots = eligibleQuestions.filter((q: any) => q.cognitiveLevel === 'HOTS');
 
-  let combined = [...pickedLots, ...pickedMots, ...pickedHots];
+    const pickedLots = shuffle(lots).slice(0, target.lotsCount || 1);
+    const pickedMots = shuffle(mots).slice(0, target.motsCount || 2);
+    const pickedHots = shuffle(hots).slice(0, target.hotsCount || 1);
+    combined = [...pickedLots, ...pickedMots, ...pickedHots];
+  }
+
   if (combined.length === 0) {
-    combined = eligibleQuestions.slice(0, target.totalQuestions || 5);
+    combined = shuffle(eligibleQuestions).slice(0, target.totalQuestions || 5);
   }
 
   // Shuffle overall question order
@@ -750,6 +357,18 @@ function generateRandomizedStudentPackage(examId: string, studentId: string) {
       }
     }
 
+    const cogLevel = q.cognitiveLevel || 'MOTS';
+    const configuredWeight = exam.scoringConfig?.weights?.[cogLevel];
+    const resolvedPoints =
+      typeof configuredWeight === 'number' && !Number.isNaN(configuredWeight) && configuredWeight >= 0
+        ? configuredWeight
+        : (q.points || 10);
+
+    const maxSelectable =
+      q.type === 'pg_kompleks' && Array.isArray(q.correctAnswer)
+        ? q.correctAnswer.length
+        : undefined;
+
     return {
       number: idx + 1,
       id: q.id,
@@ -757,11 +376,12 @@ function generateRandomizedStudentPackage(examId: string, studentId: string) {
       chapterId: q.chapterId,
       subchapterId: q.subchapterId,
       competencyId: q.competencyId,
-      cognitiveLevel: q.cognitiveLevel,
+      cognitiveLevel: cogLevel,
       type: q.type,
       questionText: q.questionText,
       options: sanitizedOptions,
-      points: q.points || 10,
+      points: resolvedPoints,
+      ...(maxSelectable !== undefined ? { maxSelectable } : {}),
       // CRITICAL: correctAnswer is NEVER included here!
     };
   });
@@ -784,8 +404,8 @@ function generateRandomizedStudentPackage(examId: string, studentId: string) {
 // -------------------------------------------------------------
 
 // 1. Auth routes
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password, portal } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username dan password wajib diisi.' });
   }
@@ -794,28 +414,53 @@ app.post('/api/auth/login', (req, res) => {
   const cleanPassword = String(password).trim();
   const hash = hashPassword(cleanPassword);
 
-  let user = db.users.find((u: any) => {
-    if (u.username.toLowerCase() !== cleanUsername) return false;
-    // Check direct hash match
-    if (u.passwordHash === hash) return true;
-    // Check un-salted or alternative default hashes
-    if (u.passwordHash === hashPassword(cleanUsername)) return true;
-    // Demo accounts fallback matches
-    if (cleanUsername === 'admin' && (cleanPassword === 'admin123' || cleanPassword === 'admin')) return true;
-    if (cleanUsername === 'guru' && (cleanPassword === 'guru123' || cleanPassword === 'guru')) return true;
-    if (cleanUsername === 'gurubio' && (cleanPassword === 'guru123' || cleanPassword === 'gurubio')) return true;
-    if (cleanUsername.startsWith('siswa') && (cleanPassword === 'siswa123' || cleanPassword === 'siswa')) return true;
+  const matchingAccounts = db.users.filter((u: any) => {
+    const uName = (u.username || '').toLowerCase();
+    const uNis = (u.nis || '').toLowerCase();
+    const uNip = (u.nip || '').toLowerCase();
+    const uEmail = (u.email || '').toLowerCase();
+    if (uName === cleanUsername) return true;
+    if (u.role === 'student' && uNis && uNis === cleanUsername) return true;
+    if ((u.role === 'admin' || u.role === 'teacher') && ((uNip && uNip === cleanUsername) || (uEmail && uEmail === cleanUsername))) {
+      return true;
+    }
     return false;
   });
 
-  // If specific demo account was deleted or modified, fall back to any active user matching role or prefix
+  const verifyPassword = (u: any) => {
+    if (u.passwordHash === hash) return true;
+    if (u.plainPassword && String(u.plainPassword).trim() === cleanPassword) return true;
+    if (
+      cleanPassword.toLowerCase() === (u.username || '').toLowerCase() &&
+      u.passwordHash === hashPassword((u.username || '').toLowerCase())
+    ) {
+      return true;
+    }
+    if (u.role === 'admin' && (cleanPassword === 'admin123' || cleanPassword === 'admin') && !u.passwordCustom) return true;
+    if (u.role === 'teacher' && cleanPassword === 'guru123' && !u.passwordCustom) return true;
+    if (u.role === 'student' && cleanPassword === 'siswa123' && !u.passwordCustom) return true;
+    return false;
+  };
+
+  let user = matchingAccounts.find((u: any) => {
+    if (portal === 'student' && u.role !== 'student') return false;
+    if (portal === 'staff' && u.role === 'student') return false;
+    return verifyPassword(u);
+  });
+
   if (!user) {
-    if (cleanUsername === 'admin') {
-      user = db.users.find((u: any) => u.role === 'admin' && u.isActive !== false);
-    } else if (cleanUsername === 'guru' || cleanUsername === 'teacher') {
-      user = db.users.find((u: any) => u.role === 'teacher' && u.isActive !== false);
-    } else if (cleanUsername.startsWith('siswa') || cleanUsername === 'student') {
-      user = db.users.find((u: any) => u.role === 'student' && u.isActive !== false);
+    const wrongPortalMatch = matchingAccounts.find((u: any) => verifyPassword(u));
+    if (wrongPortalMatch) {
+      if (portal === 'student' && wrongPortalMatch.role !== 'student') {
+        return res.status(403).json({
+          error: 'Akun Admin atau Guru tidak dapat masuk melalui halaman login siswa.',
+        });
+      }
+      if (portal === 'staff' && wrongPortalMatch.role === 'student') {
+        return res.status(403).json({
+          error: 'Akun siswa tidak dapat masuk melalui halaman login Admin / Guru.',
+        });
+      }
     }
   }
 
@@ -835,6 +480,7 @@ app.post('/api/auth/login', (req, res) => {
   // Update last login
   user.lastLogin = new Date().toISOString();
   saveDatabase();
+  await persistDocToFirestore('users', user.id, user);
 
   const userSafe = { ...user };
   delete userSafe.passwordHash;
@@ -842,7 +488,7 @@ app.post('/api/auth/login', (req, res) => {
   return res.json({ success: true, user: userSafe });
 });
 
-app.post('/api/auth/change-password', (req, res) => {
+app.post('/api/auth/change-password', async (req, res) => {
   const { userId, oldPassword, newPassword } = req.body;
   const user = db.users.find((u: any) => u.id === userId);
   if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
@@ -856,7 +502,16 @@ app.post('/api/auth/change-password', (req, res) => {
   }
 
   user.passwordHash = hashPassword(newPassword);
+  user.passwordCustom = true;
+  if (user.role === 'student') {
+    user.plainPassword = newPassword;
+  }
   saveDatabase();
+  await persistDocToFirestore(
+    'users',
+    user.id,
+    user.role === 'student' ? { passwordCustom: true, plainPassword: newPassword } : { passwordCustom: true }
+  );
 
   return res.json({ success: true, message: 'Password berhasil diperbarui.' });
 });
@@ -866,12 +521,15 @@ app.get('/api/admin/users', (req, res) => {
   const safeUsers = db.users.map((u: any) => {
     const copy = { ...u };
     delete copy.passwordHash;
+    if (copy.role !== 'student') {
+      delete copy.plainPassword;
+    }
     return copy;
   });
   res.json({ users: safeUsers });
 });
 
-app.post('/api/admin/users', (req, res) => {
+app.post('/api/admin/users', async (req, res) => {
   const { username, password, name, role, email, nis, classId, nip, subjectSpecialty } = req.body;
   if (!username || !password || !name || !role) {
     return res.status(400).json({ error: 'Data akun tidak lengkap.' });
@@ -885,6 +543,7 @@ app.post('/api/admin/users', (req, res) => {
     id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     username,
     passwordHash: hashPassword(password),
+    passwordCustom: true,
     name,
     role,
     email: email || '',
@@ -895,6 +554,7 @@ app.post('/api/admin/users', (req, res) => {
   if (role === 'student') {
     newUser.nis = nis || username;
     newUser.classId = classId || '';
+    newUser.plainPassword = password;
   } else if (role === 'teacher') {
     newUser.nip = nip || '';
     newUser.subjectSpecialty = subjectSpecialty || '';
@@ -902,13 +562,14 @@ app.post('/api/admin/users', (req, res) => {
 
   db.users.push(newUser);
   saveDatabase();
+  await persistDocToFirestore('users', newUser.id, newUser);
 
   const safe = { ...newUser };
   delete safe.passwordHash;
   res.json({ success: true, user: safe });
 });
 
-app.put('/api/admin/users/:id', (req, res) => {
+app.put('/api/admin/users/:id', async (req, res) => {
   const { id } = req.params;
   const user = db.users.find((u: any) => u.id === id);
   if (!user) return res.status(404).json({ error: 'User tidak ditemukan.' });
@@ -937,9 +598,15 @@ app.put('/api/admin/users/:id', (req, res) => {
 
   if (password && password.trim().length > 0) {
     user.passwordHash = hashPassword(password.trim());
+    user.passwordCustom = true;
+    if (user.role === 'student') {
+      user.plainPassword = password.trim();
+    }
   }
 
+  user.updatedAt = new Date().toISOString();
   saveDatabase();
+  await persistDocToFirestore('users', user.id, user);
 
   const safe = { ...user };
   delete safe.passwordHash;
@@ -956,40 +623,45 @@ app.delete('/api/admin/users/:id', async (req, res) => {
   }
 
   db.users = db.users.filter((u: any) => u.id !== id);
-  try {
-    if (firestoreDb) {
-      await deleteDoc(doc(firestoreDb, 'users', id));
-    }
-  } catch (err) {
-    console.warn('[Firestore] Delete user doc warning:', err);
-  }
+  await deleteDocFromFirestore('users', id);
   saveDatabase();
   res.json({ success: true, message: 'Akun berhasil dihapus dari Manajemen Akun & Firestore.' });
 });
 
-app.post('/api/admin/users/reset-password', (req, res) => {
+app.post('/api/admin/users/reset-password', async (req, res) => {
   const { userId, newPassword } = req.body;
   const user = db.users.find((u: any) => u.id === userId);
   if (!user) return res.status(404).json({ error: 'User tidak ditemukan.' });
 
-  user.passwordHash = hashPassword(newPassword || 'sma12345');
+  const finalPass = (newPassword || (user.role === 'student' ? 'siswa123' : 'sma12345')).trim();
+  user.passwordHash = hashPassword(finalPass);
+  user.passwordCustom = true;
+  if (user.role === 'student') {
+    user.plainPassword = finalPass;
+  }
   saveDatabase();
+  await persistDocToFirestore(
+    'users',
+    user.id,
+    user.role === 'student' ? { passwordCustom: true, plainPassword: finalPass } : { passwordCustom: true }
+  );
   res.json({ success: true, message: 'Password berhasil direset.' });
 });
 
-app.post('/api/admin/users/toggle-status', (req, res) => {
+app.post('/api/admin/users/toggle-status', async (req, res) => {
   const { userId } = req.body;
   const user = db.users.find((u: any) => u.id === userId);
   if (!user) return res.status(404).json({ error: 'User tidak ditemukan.' });
 
   user.isActive = !user.isActive;
   saveDatabase();
+  await persistDocToFirestore('users', user.id, { isActive: user.isActive });
   res.json({ success: true, isActive: user.isActive });
 });
 
 // Bulk import students via CSV/JSON
-app.post('/api/admin/students/bulk-import', (req, res) => {
-  const { students } = req.body; // array of { name, nis, nisn, classId, username, password }
+app.post('/api/admin/students/bulk-import', async (req, res) => {
+  const { students } = req.body;
   if (!Array.isArray(students) || students.length === 0) {
     return res.status(400).json({ error: 'Data siswa kosong.' });
   }
@@ -1001,10 +673,11 @@ app.post('/api/admin/students/bulk-import', (req, res) => {
       continue;
     }
 
-    db.users.push({
+    const newStudent = {
       id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       username,
       passwordHash: hashPassword(s.password || 'siswa123'),
+      plainPassword: s.password || 'siswa123',
       name: s.name,
       role: 'student',
       nis: s.nis,
@@ -1013,7 +686,9 @@ app.post('/api/admin/students/bulk-import', (req, res) => {
       email: s.email || '',
       isActive: true,
       createdAt: new Date().toISOString(),
-    });
+    };
+    db.users.push(newStudent);
+    await persistDocToFirestore('users', newStudent.id, newStudent);
     imported++;
   }
 
@@ -1021,12 +696,46 @@ app.post('/api/admin/students/bulk-import', (req, res) => {
   res.json({ success: true, count: imported, message: `Berhasil mengimpor ${imported} akun siswa.` });
 });
 
+// Bulk generate random passwords for students (all or by classId)
+app.post('/api/admin/students/generate-passwords', async (req, res) => {
+  const { classId } = req.body || {};
+  const targets = db.users.filter(
+    (u: any) => u.role === 'student' && (!classId || u.classId === classId)
+  );
+
+  if (targets.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada siswa ditemukan pada cakupan yang dipilih.' });
+  }
+
+  const now = new Date().toISOString();
+  for (const student of targets) {
+    const randomPass = generateRandomPassword(6);
+    student.passwordHash = hashPassword(randomPass);
+    student.passwordCustom = true;
+    student.plainPassword = randomPass;
+    student.updatedAt = now;
+    await persistDocToFirestore('users', student.id, {
+      passwordHash: student.passwordHash,
+      passwordCustom: true,
+      plainPassword: randomPass,
+      updatedAt: now,
+    });
+  }
+
+  saveDatabase();
+  res.json({
+    success: true,
+    count: targets.length,
+    message: `Berhasil mengacak password baru untuk ${targets.length} siswa.`,
+  });
+});
+
 // Classes & Academic Years
 app.get('/api/classes', (req, res) => {
   res.json({ classes: db.classes, academicYears: db.academicYears });
 });
 
-app.post('/api/classes', (req, res) => {
+app.post('/api/classes', async (req, res) => {
   const { gradeLevel, name, academicYearId, homeroomTeacher } = req.body;
   if (!gradeLevel || !name) return res.status(400).json({ error: 'Nama kelas dan tingkat wajib diisi.' });
 
@@ -1036,13 +745,15 @@ app.post('/api/classes', (req, res) => {
     name,
     academicYearId: academicYearId || db.academicYears[0]?.id,
     homeroomTeacher: homeroomTeacher || '',
+    createdAt: new Date().toISOString(),
   };
   db.classes.push(newClass);
   saveDatabase();
+  await persistDocToFirestore('classes', newClass.id, newClass);
   res.json({ success: true, class: newClass });
 });
 
-app.put('/api/classes/:id', (req, res) => {
+app.put('/api/classes/:id', async (req, res) => {
   const { id } = req.params;
   const cls = db.classes.find((c: any) => c.id === id);
   if (!cls) return res.status(404).json({ error: 'Kelas tidak ditemukan.' });
@@ -1052,8 +763,10 @@ app.put('/api/classes/:id', (req, res) => {
   if (gradeLevel !== undefined) cls.gradeLevel = gradeLevel;
   if (homeroomTeacher !== undefined) cls.homeroomTeacher = homeroomTeacher.trim();
   if (academicYearId !== undefined) cls.academicYearId = academicYearId;
+  cls.updatedAt = new Date().toISOString();
 
   saveDatabase();
+  await persistDocToFirestore('classes', cls.id, cls);
   res.json({ success: true, class: cls, message: 'Data kelas berhasil diperbarui.' });
 });
 
@@ -1063,20 +776,15 @@ app.delete('/api/classes/:id', async (req, res) => {
   if (clsIndex === -1) return res.status(404).json({ error: 'Kelas tidak ditemukan.' });
 
   // Unlink students in this class
-  db.users.forEach((u: any) => {
+  for (const u of db.users) {
     if (u.classId === id) {
       u.classId = '';
+      await persistDocToFirestore('users', u.id, { classId: '' });
     }
-  });
+  }
 
   db.classes.splice(clsIndex, 1);
-  try {
-    if (firestoreDb) {
-      await deleteDoc(doc(firestoreDb, 'classes', id));
-    }
-  } catch (err) {
-    console.warn('[Firestore] Delete class doc warning:', err);
-  }
+  await deleteDocFromFirestore('classes', id);
   saveDatabase();
   res.json({ success: true, message: 'Kelas berhasil dihapus dari sistem & Firestore.' });
 });
@@ -1084,27 +792,15 @@ app.delete('/api/classes/:id', async (req, res) => {
 // 1.5. School Settings Management
 app.get('/api/settings', (req, res) => {
   if (!db.settings) {
-    db.settings = {
-      schoolName: 'SMAN 1 PRESTASI BANGSA',
-      schoolLogoUrl: '',
-      loginBackgroundUrl: '',
-      appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
-      academicYearText: '2024/2025 Genap',
-    };
+    db.settings = { ...createEmptyDatabase().settings };
   }
   res.json({ settings: db.settings });
 });
 
-app.put('/api/settings', (req, res) => {
+app.put('/api/settings', async (req, res) => {
   const { schoolName, schoolLogoUrl, loginBackgroundUrl, appSubtitle, academicYearText } = req.body;
   if (!db.settings) {
-    db.settings = {
-      schoolName: 'SMAN 1 PRESTASI BANGSA',
-      schoolLogoUrl: '',
-      loginBackgroundUrl: '',
-      appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
-      academicYearText: '2024/2025 Genap',
-    };
+    db.settings = { ...createEmptyDatabase().settings };
   }
 
   if (schoolName !== undefined) db.settings.schoolName = schoolName.trim();
@@ -1112,9 +808,16 @@ app.put('/api/settings', (req, res) => {
   if (loginBackgroundUrl !== undefined) db.settings.loginBackgroundUrl = loginBackgroundUrl.trim();
   if (appSubtitle !== undefined) db.settings.appSubtitle = appSubtitle.trim();
   if (academicYearText !== undefined) db.settings.academicYearText = academicYearText.trim();
+  db.settings.updatedAt = new Date().toISOString();
 
   saveDatabase();
+  await persistDocToFirestore('settings', 'school_info', db.settings);
   res.json({ success: true, settings: db.settings, message: 'Pengaturan sekolah berhasil diperbarui.' });
+});
+
+// 1.6. Activity Logs
+app.get('/api/activity-logs', (req, res) => {
+  res.json({ logs: db.activityLogs || [] });
 });
 
 // 2. Taxonomy & Curriculum
@@ -1128,7 +831,7 @@ app.get('/api/taxonomy', (req, res) => {
 });
 
 // --- Subject CRUD ---
-app.post('/api/taxonomy/subject', (req, res) => {
+app.post('/api/taxonomy/subject', async (req, res) => {
   const { name, code } = req.body;
   if (!name) return res.status(400).json({ error: 'Nama mata pelajaran wajib diisi.' });
   const newSubject = {
@@ -1139,10 +842,11 @@ app.post('/api/taxonomy/subject', (req, res) => {
   db.subjects = db.subjects || [];
   db.subjects.push(newSubject);
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `subject-${newSubject.id}`, { type: 'subject', ...newSubject });
   res.json({ success: true, subject: newSubject });
 });
 
-app.put('/api/taxonomy/subject/:id', (req, res) => {
+app.put('/api/taxonomy/subject/:id', async (req, res) => {
   const { id } = req.params;
   const { name, code } = req.body;
   const item = (db.subjects || []).find((s: any) => s.id === id);
@@ -1150,17 +854,18 @@ app.put('/api/taxonomy/subject/:id', (req, res) => {
   if (name !== undefined) item.name = name.trim();
   if (code !== undefined) item.code = code.trim();
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `subject-${id}`, { type: 'subject', ...item });
   res.json({ success: true, subject: item, message: 'Mata pelajaran berhasil diperbarui.' });
 });
 
-app.delete('/api/taxonomy/subject/:id', (req, res) => {
+app.delete('/api/taxonomy/subject/:id', async (req, res) => {
   const { id } = req.params;
   const idx = (db.subjects || []).findIndex((s: any) => s.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Mata pelajaran tidak ditemukan.' });
 
-  // Delete chapters, subchapters, competencies connected
   const deletedChapters = (db.chapters || []).filter((c: any) => c.subjectId === id).map((c: any) => c.id);
   const deletedSubchapters = (db.subchapters || []).filter((sc: any) => deletedChapters.includes(sc.chapterId)).map((sc: any) => sc.id);
+  const deletedCompetencies = (db.competencies || []).filter((cmp: any) => deletedSubchapters.includes(cmp.subchapterId)).map((cmp: any) => cmp.id);
 
   db.subjects.splice(idx, 1);
   db.chapters = (db.chapters || []).filter((c: any) => c.subjectId !== id);
@@ -1168,21 +873,27 @@ app.delete('/api/taxonomy/subject/:id', (req, res) => {
   db.competencies = (db.competencies || []).filter((cmp: any) => !deletedSubchapters.includes(cmp.subchapterId));
 
   saveDatabase();
+  await deleteTaxonomyDocFromFirestore('subject', id);
+  for (const cId of deletedChapters) await deleteTaxonomyDocFromFirestore('chapter', cId);
+  for (const scId of deletedSubchapters) await deleteTaxonomyDocFromFirestore('subchapter', scId);
+  for (const cmpId of deletedCompetencies) await deleteTaxonomyDocFromFirestore('competency', cmpId);
+
   res.json({ success: true, message: 'Mata pelajaran dan taksonomi turunannya berhasil dihapus.' });
 });
 
 // --- Chapter CRUD ---
-app.post('/api/taxonomy/chapter', (req, res) => {
+app.post('/api/taxonomy/chapter', async (req, res) => {
   const { subjectId, name } = req.body;
   if (!subjectId || !name) return res.status(400).json({ error: 'Mata pelajaran dan nama Bab wajib diisi.' });
   const chapter = { id: `ch-${Date.now()}`, subjectId, name: name.trim() };
   db.chapters = db.chapters || [];
   db.chapters.push(chapter);
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `chapter-${chapter.id}`, { type: 'chapter', ...chapter });
   res.json({ success: true, chapter });
 });
 
-app.put('/api/taxonomy/chapter/:id', (req, res) => {
+app.put('/api/taxonomy/chapter/:id', async (req, res) => {
   const { id } = req.params;
   const { name, subjectId } = req.body;
   const item = (db.chapters || []).find((c: any) => c.id === id);
@@ -1190,36 +901,43 @@ app.put('/api/taxonomy/chapter/:id', (req, res) => {
   if (name !== undefined) item.name = name.trim();
   if (subjectId !== undefined) item.subjectId = subjectId;
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `chapter-${id}`, { type: 'chapter', ...item });
   res.json({ success: true, chapter: item, message: 'Bab berhasil diperbarui.' });
 });
 
-app.delete('/api/taxonomy/chapter/:id', (req, res) => {
+app.delete('/api/taxonomy/chapter/:id', async (req, res) => {
   const { id } = req.params;
   const idx = (db.chapters || []).findIndex((c: any) => c.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Bab tidak ditemukan.' });
 
   const deletedSubchapters = (db.subchapters || []).filter((sc: any) => sc.chapterId === id).map((sc: any) => sc.id);
+  const deletedCompetencies = (db.competencies || []).filter((cmp: any) => deletedSubchapters.includes(cmp.subchapterId)).map((cmp: any) => cmp.id);
 
   db.chapters.splice(idx, 1);
   db.subchapters = (db.subchapters || []).filter((sc: any) => sc.chapterId !== id);
   db.competencies = (db.competencies || []).filter((cmp: any) => !deletedSubchapters.includes(cmp.subchapterId));
 
   saveDatabase();
+  await deleteTaxonomyDocFromFirestore('chapter', id);
+  for (const scId of deletedSubchapters) await deleteTaxonomyDocFromFirestore('subchapter', scId);
+  for (const cmpId of deletedCompetencies) await deleteTaxonomyDocFromFirestore('competency', cmpId);
+
   res.json({ success: true, message: 'Bab dan taksonomi turunannya berhasil dihapus.' });
 });
 
 // --- Subchapter CRUD ---
-app.post('/api/taxonomy/subchapter', (req, res) => {
+app.post('/api/taxonomy/subchapter', async (req, res) => {
   const { chapterId, name } = req.body;
   if (!chapterId || !name) return res.status(400).json({ error: 'Bab dan nama Sub Bab wajib diisi.' });
   const subchapter = { id: `sub-${Date.now()}`, chapterId, name: name.trim() };
   db.subchapters = db.subchapters || [];
   db.subchapters.push(subchapter);
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `subchapter-${subchapter.id}`, { type: 'subchapter', ...subchapter });
   res.json({ success: true, subchapter });
 });
 
-app.put('/api/taxonomy/subchapter/:id', (req, res) => {
+app.put('/api/taxonomy/subchapter/:id', async (req, res) => {
   const { id } = req.params;
   const { name, chapterId } = req.body;
   const item = (db.subchapters || []).find((sc: any) => sc.id === id);
@@ -1227,81 +945,107 @@ app.put('/api/taxonomy/subchapter/:id', (req, res) => {
   if (name !== undefined) item.name = name.trim();
   if (chapterId !== undefined) item.chapterId = chapterId;
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `subchapter-${id}`, { type: 'subchapter', ...item });
   res.json({ success: true, subchapter: item, message: 'Sub Bab berhasil diperbarui.' });
 });
 
-app.delete('/api/taxonomy/subchapter/:id', (req, res) => {
+app.delete('/api/taxonomy/subchapter/:id', async (req, res) => {
   const { id } = req.params;
   const idx = (db.subchapters || []).findIndex((sc: any) => sc.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Sub Bab tidak ditemukan.' });
 
+  const deletedCompetencies = (db.competencies || []).filter((cmp: any) => cmp.subchapterId === id).map((cmp: any) => cmp.id);
   db.subchapters.splice(idx, 1);
   db.competencies = (db.competencies || []).filter((cmp: any) => cmp.subchapterId !== id);
 
   saveDatabase();
+  await deleteTaxonomyDocFromFirestore('subchapter', id);
+  for (const cmpId of deletedCompetencies) await deleteTaxonomyDocFromFirestore('competency', cmpId);
+
   res.json({ success: true, message: 'Sub Bab dan indikator turunannya berhasil dihapus.' });
 });
 
-// --- Competency CRUD ---
-app.post('/api/taxonomy/competency', (req, res) => {
+// --- Competency (Sub-Sub Bab) CRUD ---
+app.post('/api/taxonomy/competency', async (req, res) => {
   const { subchapterId, code, description } = req.body;
-  if (!subchapterId || !code || !description) {
-    return res.status(400).json({ error: 'Sub Bab, Kode KD, dan Deskripsi Kompetensi wajib diisi.' });
+  if (!subchapterId || (!description && !code)) {
+    return res.status(400).json({ error: 'Sub Bab dan Nama Sub-Sub Bab wajib diisi.' });
   }
   const competency = {
     id: `cmp-${Date.now()}`,
     subchapterId,
-    code: code.trim(),
-    description: description.trim(),
+    code: (code || '').trim(),
+    description: (description || code || '').trim(),
   };
   db.competencies = db.competencies || [];
   db.competencies.push(competency);
   saveDatabase();
+  await persistDocToFirestore('taxonomy', `competency-${competency.id}`, { type: 'competency', ...competency });
   res.json({ success: true, competency });
 });
 
-app.put('/api/taxonomy/competency/:id', (req, res) => {
+app.put('/api/taxonomy/competency/:id', async (req, res) => {
   const { id } = req.params;
   const { code, description, subchapterId } = req.body;
   const item = (db.competencies || []).find((cmp: any) => cmp.id === id);
-  if (!item) return res.status(404).json({ error: 'Kompetensi / Indikator tidak ditemukan.' });
+  if (!item) return res.status(404).json({ error: 'Sub-Sub Bab tidak ditemukan.' });
   if (code !== undefined) item.code = code.trim();
   if (description !== undefined) item.description = description.trim();
   if (subchapterId !== undefined) item.subchapterId = subchapterId;
   saveDatabase();
-  res.json({ success: true, competency: item, message: 'Kompetensi / Indikator berhasil diperbarui.' });
+  await persistDocToFirestore('taxonomy', `competency-${id}`, { type: 'competency', ...item });
+  res.json({ success: true, competency: item, message: 'Sub-Sub Bab berhasil diperbarui.' });
 });
 
-app.delete('/api/taxonomy/competency/:id', (req, res) => {
+app.delete('/api/taxonomy/competency/:id', async (req, res) => {
   const { id } = req.params;
   const idx = (db.competencies || []).findIndex((cmp: any) => cmp.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Kompetensi / Indikator tidak ditemukan.' });
+  if (idx === -1) return res.status(404).json({ error: 'Sub-Sub Bab tidak ditemukan.' });
 
   db.competencies.splice(idx, 1);
   saveDatabase();
-  res.json({ success: true, message: 'Indikator / Kompetensi berhasil dihapus.' });
+  await deleteTaxonomyDocFromFirestore('competency', id);
+  res.json({ success: true, message: 'Sub-Sub Bab berhasil dihapus.' });
 });
 
 // 3. Question Bank Management
-app.get('/api/questions', (req, res) => {
-  const { subjectId, chapterId, cognitiveLevel, type, status, search } = req.query;
+app.get('/api/questions', async (req, res) => {
+  const { subjectId, chapterId, subchapterId, competencyId, cognitiveLevel, type, status, search } = req.query;
+  const codeSync = assignMissingQuestionCodes(db.questions || [], db.subjects || []);
+  db.questions = codeSync.questions;
+  if (codeSync.updatedQuestions.length > 0) {
+    for (const updatedQ of codeSync.updatedQuestions) {
+      if (updatedQ.id) {
+        await persistDocToFirestore('questions', updatedQ.id, { code: updatedQ.code });
+      }
+    }
+    saveDatabase();
+  }
+
   let list = db.questions;
 
   if (subjectId) list = list.filter((q: any) => q.subjectId === subjectId);
   if (chapterId) list = list.filter((q: any) => q.chapterId === chapterId);
+  if (subchapterId) list = list.filter((q: any) => q.subchapterId === subchapterId);
+  if (competencyId) list = list.filter((q: any) => q.competencyId === competencyId);
   if (cognitiveLevel) list = list.filter((q: any) => q.cognitiveLevel === cognitiveLevel);
   if (type) list = list.filter((q: any) => q.type === type);
   if (status) list = list.filter((q: any) => q.status === status);
   if (search) {
     const s = String(search).toLowerCase();
-    list = list.filter((q: any) => q.questionText.toLowerCase().includes(s));
+    list = list.filter(
+      (q: any) =>
+        (q.questionText || '').toLowerCase().includes(s) ||
+        (q.code || '').toLowerCase().includes(s)
+    );
   }
 
   res.json({ questions: list });
 });
 
-app.post('/api/questions', (req, res) => {
+app.post('/api/questions', async (req, res) => {
   const {
+    code,
     subjectId,
     chapterId,
     subchapterId,
@@ -1321,8 +1065,18 @@ app.post('/api/questions', (req, res) => {
     return res.status(400).json({ error: 'Kolom wajib soal belum terisi.' });
   }
 
+  let finalCode = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if (finalCode) {
+    if (isQuestionCodeDuplicate(finalCode, db.questions || [])) {
+      return res.status(400).json({ error: `Kode soal "${finalCode}" sudah digunakan oleh soal lain.` });
+    }
+  } else {
+    finalCode = generateNextQuestionCode(subjectId, db.questions || [], db.subjects || []);
+  }
+
   const newQuestion = {
     id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    code: finalCode,
     subjectId,
     chapterId: chapterId || '',
     subchapterId: subchapterId || '',
@@ -1342,33 +1096,62 @@ app.post('/api/questions', (req, res) => {
 
   db.questions.push(newQuestion);
   saveDatabase();
+  await persistDocToFirestore('questions', newQuestion.id, newQuestion);
   res.json({ success: true, question: newQuestion });
 });
 
-app.put('/api/questions/:id', (req, res) => {
+app.put('/api/questions/:id', async (req, res) => {
   const { id } = req.params;
   const idx = db.questions.findIndex((q: any) => q.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Soal tidak ditemukan.' });
 
+  const existing = db.questions[idx];
+  const nextSubjectId = req.body.subjectId !== undefined ? req.body.subjectId : existing.subjectId;
+  const subjectChanged = nextSubjectId !== existing.subjectId;
+
+  let nextCode = existing.code || '';
+  if (req.body.code !== undefined) {
+    const requestedCode = String(req.body.code || '').trim().toUpperCase();
+    if (!requestedCode) {
+      nextCode = generateNextQuestionCode(nextSubjectId, db.questions, db.subjects || [], id);
+    } else if (
+      subjectChanged &&
+      requestedCode === (existing.code || '').trim().toUpperCase() &&
+      !requestedCode.startsWith(`${getSubjectCodePrefix(nextSubjectId, db.subjects || [])}-`)
+    ) {
+      nextCode = generateNextQuestionCode(nextSubjectId, db.questions, db.subjects || [], id);
+    } else {
+      if (isQuestionCodeDuplicate(requestedCode, db.questions, id)) {
+        return res.status(400).json({ error: `Kode soal "${requestedCode}" sudah digunakan oleh soal lain.` });
+      }
+      nextCode = requestedCode;
+    }
+  } else if (!nextCode || (subjectChanged && !nextCode.startsWith(`${getSubjectCodePrefix(nextSubjectId, db.subjects || [])}-`))) {
+    nextCode = generateNextQuestionCode(nextSubjectId, db.questions, db.subjects || [], id);
+  }
+
   db.questions[idx] = {
-    ...db.questions[idx],
+    ...existing,
     ...req.body,
+    code: nextCode,
     updatedAt: new Date().toISOString(),
   };
 
   saveDatabase();
+  await persistDocToFirestore('questions', id, db.questions[idx]);
   res.json({ success: true, question: db.questions[idx] });
 });
 
-app.delete('/api/questions/:id', (req, res) => {
+app.delete('/api/questions/:id', async (req, res) => {
   const { id } = req.params;
   db.questions = db.questions.filter((q: any) => q.id !== id);
   saveDatabase();
+  await deleteDocFromFirestore('questions', id);
   res.json({ success: true });
 });
 
 // Bulk Import Questions
-app.post('/api/questions/bulk-import', (req, res) => {
+app.post('/api/questions/bulk-import', async (req, res) => {
   const { questions } = req.body;
   if (!Array.isArray(questions) || questions.length === 0) {
     return res.status(400).json({ error: 'Data soal kosong.' });
@@ -1376,9 +1159,17 @@ app.post('/api/questions/bulk-import', (req, res) => {
 
   let count = 0;
   for (const q of questions) {
-    db.questions.push({
+    const targetSubjectId = q.subjectId || db.subjects[0]?.id || '';
+    const requestedCode = typeof q.code === 'string' ? q.code.trim().toUpperCase() : '';
+    const finalCode =
+      requestedCode && !isQuestionCodeDuplicate(requestedCode, db.questions || [])
+        ? requestedCode
+        : generateNextQuestionCode(targetSubjectId, db.questions || [], db.subjects || []);
+
+    const newQ = {
       id: `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      subjectId: q.subjectId || db.subjects[0]?.id,
+      code: finalCode,
+      subjectId: targetSubjectId,
       chapterId: q.chapterId || '',
       subchapterId: q.subchapterId || '',
       competencyId: q.competencyId || '',
@@ -1392,7 +1183,9 @@ app.post('/api/questions/bulk-import', (req, res) => {
       status: 'active',
       author: q.author || 'Import',
       createdAt: new Date().toISOString(),
-    });
+    };
+    db.questions.push(newQ);
+    await persistDocToFirestore('questions', newQ.id, newQ);
     count++;
   }
 
@@ -1407,37 +1200,34 @@ app.get('/api/exams', (req, res) => {
 
 // Validate question availability before generating exam
 app.post('/api/exams/validate-availability', (req, res) => {
-  const { subjectId, selectedChapterIds, cognitiveTarget } = req.body;
+  const {
+    subjectId,
+    selectedChapterIds,
+    selectedSubchapterIds,
+    selectedCompetencyIds,
+    cognitiveTarget,
+  } = req.body;
 
-  const activePool = db.questions.filter((q: any) => {
-    if (q.status !== 'active') return false;
-    if (subjectId && q.subjectId !== subjectId) return false;
-    if (selectedChapterIds && selectedChapterIds.length > 0) {
-      if (!selectedChapterIds.includes(q.chapterId)) return false;
-    }
-    return true;
-  });
+  const activePool = db.questions.filter((q: any) =>
+    isQuestionInExamScope(
+      q,
+      {
+        subjectId,
+        selectedChapterIds,
+        selectedSubchapterIds,
+        selectedCompetencyIds,
+      },
+      {
+        subchapters: db.subchapters,
+        competencies: db.competencies,
+      }
+    )
+  );
 
-  const availableLots = activePool.filter((q: any) => q.cognitiveLevel === 'LOTS').length;
-  const availableMots = activePool.filter((q: any) => q.cognitiveLevel === 'MOTS').length;
-  const availableHots = activePool.filter((q: any) => q.cognitiveLevel === 'HOTS').length;
-
-  const targetLots = Number(cognitiveTarget?.lotsCount || 0);
-  const targetMots = Number(cognitiveTarget?.motsCount || 0);
-  const targetHots = Number(cognitiveTarget?.hotsCount || 0);
-
-  const isValid = availableLots >= targetLots && availableMots >= targetMots && availableHots >= targetHots;
-
-  res.json({
-    isValid,
-    totalAvailable: activePool.length,
-    lots: { available: availableLots, required: targetLots, sufficient: availableLots >= targetLots },
-    mots: { available: availableMots, required: targetMots, sufficient: availableMots >= targetMots },
-    hots: { available: availableHots, required: targetHots, sufficient: availableHots >= targetHots },
-  });
+  res.json(evaluateScopeAvailability(activePool, cognitiveTarget));
 });
 
-app.post('/api/exams', (req, res) => {
+app.post('/api/exams', async (req, res) => {
   const {
     title,
     subjectId,
@@ -1453,6 +1243,7 @@ app.post('/api/exams', (req, res) => {
     selectedSubchapterIds,
     selectedCompetencyIds,
     cognitiveTarget,
+    scoringConfig,
     antiCheating,
     tokenAutoRotate,
     tokenIntervalMinutes,
@@ -1465,6 +1256,24 @@ app.post('/api/exams', (req, res) => {
 
   // Generate initial token (e.g. 6 alphanumeric uppercase)
   const generatedToken = crypto.randomBytes(3).toString('hex').toUpperCase();
+
+  const normalizedScoringConfig = scoringConfig
+    ? {
+        pgKompleksMode: scoringConfig.pgKompleksMode === 'exact' ? 'exact' : 'partial',
+        useMinusSystem: Boolean(scoringConfig.useMinusSystem),
+        minusValue: Math.max(0, Number(scoringConfig.minusValue) || 0),
+        weights: {
+          LOTS: Math.max(0, Number(scoringConfig.weights?.LOTS) || 0),
+          MOTS: Math.max(0, Number(scoringConfig.weights?.MOTS) || 0),
+          HOTS: Math.max(0, Number(scoringConfig.weights?.HOTS) || 0),
+        },
+      }
+    : {
+        pgKompleksMode: 'partial',
+        useMinusSystem: false,
+        minusValue: 0,
+        weights: { LOTS: 10, MOTS: 10, HOTS: 10 },
+      };
 
   const newExam = {
     id: `ex-${Date.now()}`,
@@ -1482,6 +1291,7 @@ app.post('/api/exams', (req, res) => {
     selectedSubchapterIds: selectedSubchapterIds || [],
     selectedCompetencyIds: selectedCompetencyIds || [],
     cognitiveTarget: cognitiveTarget || { lotsCount: 2, motsCount: 3, hotsCount: 2, totalQuestions: 7 },
+    scoringConfig: normalizedScoringConfig,
     token: generatedToken,
     tokenAutoRotate: !!tokenAutoRotate,
     tokenIntervalMinutes: Number(tokenIntervalMinutes) || 15,
@@ -1497,25 +1307,30 @@ app.post('/api/exams', (req, res) => {
     },
     status: 'active',
     isPublishedResults: false,
-    createdTeacherId: teacherId || 'usr-teacher-1',
+    showLiveScore: false,
+    createdTeacherId: teacherId || '',
     createdAt: new Date().toISOString(),
   };
 
-  db.exams.push(newExam);
-  db.activityLogs.unshift({
+  const logEntry = {
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     actorName: 'Guru',
     role: 'teacher',
     action: 'CREATE_EXAM',
     details: `Membuat Ujian "${newExam.title}" (Token: ${newExam.token})`,
-  });
+  };
+
+  db.exams.push(newExam);
+  db.activityLogs.unshift(logEntry);
 
   saveDatabase();
+  await persistDocToFirestore('exams', newExam.id, newExam);
+  await persistDocToFirestore('activity_logs', logEntry.id, logEntry);
   res.json({ success: true, exam: newExam });
 });
 
-app.put('/api/exams/:id', (req, res) => {
+app.put('/api/exams/:id', async (req, res) => {
   const { id } = req.params;
   const idx = db.exams.findIndex((e: any) => e.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Ujian tidak ditemukan.' });
@@ -1527,22 +1342,41 @@ app.put('/api/exams/:id', (req, res) => {
   };
 
   saveDatabase();
+  await persistDocToFirestore('exams', id, db.exams[idx]);
   res.json({ success: true, exam: db.exams[idx] });
 });
 
 // Toggle publish score to students
-app.post('/api/exams/:id/publish', (req, res) => {
+app.post('/api/exams/:id/publish', async (req, res) => {
   const { id } = req.params;
   const exam = db.exams.find((e: any) => e.id === id);
   if (!exam) return res.status(404).json({ error: 'Ujian tidak ditemukan.' });
 
   exam.isPublishedResults = !exam.isPublishedResults;
   saveDatabase();
+  await persistDocToFirestore('exams', id, { isPublishedResults: exam.isPublishedResults });
   res.json({ success: true, isPublishedResults: exam.isPublishedResults });
 });
 
+// Admin toggle real-time live score visibility in Live Monitoring
+app.post('/api/exams/:id/toggle-live-score', async (req, res) => {
+  const { id } = req.params;
+  const exam = db.exams.find((e: any) => e.id === id);
+  if (!exam) return res.status(404).json({ error: 'Ujian tidak ditemukan.' });
+
+  const nextValue =
+    typeof req.body?.showLiveScore === 'boolean'
+      ? req.body.showLiveScore
+      : !Boolean(exam.showLiveScore);
+
+  exam.showLiveScore = nextValue;
+  saveDatabase();
+  await persistDocToFirestore('exams', id, { showLiveScore: nextValue });
+  res.json({ success: true, showLiveScore: nextValue });
+});
+
 // 5. Exam Token Management
-app.post('/api/exams/:id/token/regenerate', (req, res) => {
+app.post('/api/exams/:id/token/regenerate', async (req, res) => {
   const { id } = req.params;
   const exam = db.exams.find((e: any) => e.id === id);
   if (!exam) return res.status(404).json({ error: 'Ujian tidak ditemukan.' });
@@ -1551,20 +1385,24 @@ app.post('/api/exams/:id/token/regenerate', (req, res) => {
   exam.token = newToken;
   exam.tokenUpdatedAt = new Date().toISOString();
 
-  db.activityLogs.unshift({
+  const logEntry = {
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
     actorName: 'Guru',
     role: 'teacher',
     action: 'REGENERATE_TOKEN',
     details: `Memperbarui Token Ujian "${exam.title}" menjadi: ${newToken}`,
-  });
+  };
+
+  db.activityLogs.unshift(logEntry);
 
   saveDatabase();
+  await persistDocToFirestore('exams', id, { token: newToken, tokenUpdatedAt: exam.tokenUpdatedAt });
+  await persistDocToFirestore('activity_logs', logEntry.id, logEntry);
   res.json({ success: true, token: newToken, tokenUpdatedAt: exam.tokenUpdatedAt });
 });
 
-app.post('/api/exams/:id/token/update-settings', (req, res) => {
+app.post('/api/exams/:id/token/update-settings', async (req, res) => {
   const { id } = req.params;
   const { tokenAutoRotate, tokenIntervalMinutes, isTokenActive } = req.body;
   const exam = db.exams.find((e: any) => e.id === id);
@@ -1575,6 +1413,11 @@ app.post('/api/exams/:id/token/update-settings', (req, res) => {
   if (typeof isTokenActive === 'boolean') exam.isTokenActive = isTokenActive;
 
   saveDatabase();
+  await persistDocToFirestore('exams', id, {
+    tokenAutoRotate: exam.tokenAutoRotate,
+    tokenIntervalMinutes: exam.tokenIntervalMinutes,
+    isTokenActive: exam.isTokenActive,
+  });
   res.json({ success: true, exam });
 });
 
@@ -1621,7 +1464,7 @@ app.get('/api/student/exams', (req, res) => {
 });
 
 // Student starts exam: validates token, class, time window, generates/recovers package
-app.post('/api/exams/:id/start', (req, res) => {
+app.post('/api/exams/:id/start', async (req, res) => {
   const { id: examId } = req.params;
   const { studentId, inputToken } = req.body;
 
@@ -1678,17 +1521,28 @@ app.post('/api/exams/:id/start', (req, res) => {
       doubtfulFlags: {},
       violationCount: 0,
       violations: [],
+      questionIds: pkg.questions.map((q: any) => q.id),
       lastHeartbeat: new Date().toISOString(),
     };
 
     db.examSessions[sessionKey] = session;
     saveDatabase();
+    await persistDocToFirestore('exam_sessions', sessionKey, session);
   } else if (session.status === 'completed') {
     return res.status(400).json({ error: 'Anda sudah menyelesaikan ujian ini.' });
   }
 
   // Retrieve student's sanitized question package
   const studentPackage = db.examPackages[sessionKey] || generateRandomizedStudentPackage(examId, studentId);
+  const sanitizedQuestions = (studentPackage?.questions || []).map((pq: any) => {
+    if (pq.type === 'pg_kompleks' && (typeof pq.maxSelectable !== 'number' || pq.maxSelectable <= 0)) {
+      const masterQ = db.questions.find((mq: any) => mq.id === pq.id);
+      if (masterQ && Array.isArray(masterQ.correctAnswer)) {
+        return { ...pq, maxSelectable: masterQ.correctAnswer.length };
+      }
+    }
+    return pq;
+  });
 
   res.json({
     success: true,
@@ -1699,13 +1553,19 @@ app.post('/api/exams/:id/start', (req, res) => {
       subjectName: db.subjects.find((s: any) => s.id === exam.subjectId)?.name,
       durationMinutes: exam.durationMinutes,
       antiCheating: exam.antiCheating,
+      scoringConfig: exam.scoringConfig || {
+        pgKompleksMode: 'partial',
+        useMinusSystem: false,
+        minusValue: 0,
+        weights: { LOTS: 10, MOTS: 10, HOTS: 10 },
+      },
     },
-    questions: studentPackage.questions,
+    questions: sanitizedQuestions,
   });
 });
 
 // Periodic autosave & heartbeat endpoint
-app.post('/api/exams/:id/autosave', (req, res) => {
+app.post('/api/exams/:id/autosave', async (req, res) => {
   const { id: examId } = req.params;
   const { studentId, answers, doubtfulFlags, currentQuestionIndex, remainingSeconds } = req.body;
 
@@ -1727,16 +1587,19 @@ app.post('/api/exams/:id/autosave', (req, res) => {
 
   session.lastHeartbeat = new Date().toISOString();
   saveDatabase();
+  await persistDocToFirestore('exam_sessions', sessionKey, session);
 
   res.json({
     success: true,
     savedAt: session.lastHeartbeat,
-    answeredCount: Object.keys(session.answers).length,
+    answeredCount: Object.values(session.answers || {}).filter(
+      (v: any) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
+    ).length,
   });
 });
 
 // Log Anti-Cheating Event
-app.post('/api/exams/:id/violation', (req, res) => {
+app.post('/api/exams/:id/violation', async (req, res) => {
   const { id: examId } = req.params;
   const { studentId, type, description } = req.body;
 
@@ -1763,6 +1626,7 @@ app.post('/api/exams/:id/violation', (req, res) => {
   }
 
   saveDatabase();
+  await persistDocToFirestore('exam_sessions', sessionKey, session);
 
   res.json({
     success: true,
@@ -1773,7 +1637,7 @@ app.post('/api/exams/:id/violation', (req, res) => {
 });
 
 // Submit Exam & Auto-grading
-app.post('/api/exams/:id/submit', (req, res) => {
+app.post('/api/exams/:id/submit', async (req, res) => {
   const { id: examId } = req.params;
   const { studentId, answers } = req.body;
 
@@ -1807,14 +1671,22 @@ app.post('/api/exams/:id/submit', (req, res) => {
     HOTS: { total: 0, correct: 0 },
   };
 
+  const useMinusSystem = Boolean(exam.scoringConfig?.useMinusSystem);
+  const minusValue = useMinusSystem ? Math.abs(Number(exam.scoringConfig?.minusValue) || 0) : 0;
+  const pgKompleksMode = exam.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial';
+
   const questionDetails = questionsInPkg.map((q: any) => {
     // Find master question with correct answer
     const master = db.questions.find((mq: any) => mq.id === q.id);
     const studentAns = session.answers[q.id];
-    const points = master?.points || 10;
+    const cogLevel = master?.cognitiveLevel || q.cognitiveLevel || 'MOTS';
+    const configuredWeight = exam.scoringConfig?.weights?.[cogLevel];
+    const points =
+      typeof configuredWeight === 'number' && !Number.isNaN(configuredWeight) && configuredWeight >= 0
+        ? configuredWeight
+        : (master?.points || 10);
     maxPossiblePoints += points;
 
-    const cogLevel = master?.cognitiveLevel || 'MOTS';
     if (!breakdownByCognitive[cogLevel]) {
       breakdownByCognitive[cogLevel] = { total: 0, correct: 0 };
     }
@@ -1824,7 +1696,13 @@ app.post('/api/exams/:id/submit', (req, res) => {
     let scoreEarned = 0;
     let pendingManualGrade = false;
 
-    if (studentAns === undefined || studentAns === null || studentAns === '') {
+    const isUnanswered =
+      studentAns === undefined ||
+      studentAns === null ||
+      studentAns === '' ||
+      (Array.isArray(studentAns) && studentAns.length === 0);
+
+    if (isUnanswered) {
       emptyCount++;
     } else if (master?.type === 'pg') {
       if (String(studentAns).trim().toUpperCase() === String(master.correctAnswer).trim().toUpperCase()) {
@@ -1834,24 +1712,34 @@ app.post('/api/exams/:id/submit', (req, res) => {
         breakdownByCognitive[cogLevel].correct += 1;
       } else {
         wrongCount++;
+        if (useMinusSystem) scoreEarned = -minusValue;
       }
     } else if (master?.type === 'pg_kompleks') {
       // Array of selections
-      const correctArr = Array.isArray(master.correctAnswer) ? master.correctAnswer.sort() : [];
-      const studentArr = Array.isArray(studentAns) ? studentAns.sort() : [];
+      const correctArr = Array.isArray(master.correctAnswer)
+        ? Array.from(new Set(master.correctAnswer.map(String))).sort()
+        : [];
+      const studentArr = Array.isArray(studentAns)
+        ? Array.from(new Set(studentAns.map(String))).sort()
+        : [];
 
-      if (JSON.stringify(correctArr) === JSON.stringify(studentArr)) {
+      if (correctArr.length > 0 && JSON.stringify(correctArr) === JSON.stringify(studentArr)) {
         isCorrect = true;
         scoreEarned = points;
         correctCount++;
         breakdownByCognitive[cogLevel].correct += 1;
       } else {
-        // Partial credit: proportion of matches
-        const matches = studentArr.filter((item: string) => correctArr.includes(item)).length;
-        if (matches > 0 && studentArr.length <= correctArr.length + 1) {
-          scoreEarned = Math.round((matches / correctArr.length) * points * 0.7);
-        }
         wrongCount++;
+        if (pgKompleksMode === 'exact') {
+          scoreEarned = useMinusSystem ? -minusValue : 0;
+        } else if (correctArr.length > 0) {
+          // Sistem Kredit Parsial: proporsi jawaban benar sesuai jumlah kunci jawaban benar (mis. 2/3 * bobot)
+          const matches = studentArr.filter((item: string) => correctArr.includes(item)).length;
+          const wrongSelected = studentArr.length - matches;
+          const partialPoints = matches > 0 ? (matches / correctArr.length) * points : 0;
+          const penalty = useMinusSystem ? wrongSelected * minusValue : 0;
+          scoreEarned = Number((partialPoints - penalty).toFixed(4));
+        }
       }
     } else if (master?.type === 'benar_salah') {
       if (String(studentAns) === String(master.correctAnswer)) {
@@ -1861,6 +1749,7 @@ app.post('/api/exams/:id/submit', (req, res) => {
         breakdownByCognitive[cogLevel].correct += 1;
       } else {
         wrongCount++;
+        if (useMinusSystem) scoreEarned = -minusValue;
       }
     } else if (master?.type === 'esai') {
       pendingManualGrade = true;
@@ -1886,7 +1775,10 @@ app.post('/api/exams/:id/submit', (req, res) => {
     };
   });
 
-  const finalScore = maxPossiblePoints > 0 ? Math.round((totalPointsEarned / maxPossiblePoints) * (exam.maxScore || 100)) : 0;
+  const finalScore =
+    maxPossiblePoints > 0
+      ? Math.round((totalPointsEarned / maxPossiblePoints) * (exam.maxScore || 100))
+      : 0;
   const isPassed = finalScore >= (exam.kktpScore || 75);
 
   const result = {
@@ -1911,6 +1803,8 @@ app.post('/api/exams/:id/submit', (req, res) => {
 
   db.examResults[sessionKey] = result;
   saveDatabase();
+  await persistDocToFirestore('exam_sessions', sessionKey, session);
+  await persistDocToFirestore('exam_results', sessionKey, result);
 
   res.json({
     success: true,
@@ -1954,7 +1848,9 @@ app.get('/api/exams/:id/monitoring', (req, res) => {
       status = session.status;
       remainingSeconds = session.remainingSeconds ?? 0;
       currentQuestionIndex = session.currentQuestionIndex || 0;
-      answeredCount = Object.keys(session.answers || {}).length;
+      answeredCount = Object.values(session.answers || {}).filter(
+        (v: any) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
+      ).length;
       violationCount = session.violationCount || 0;
       violations = session.violations || [];
 
@@ -1966,6 +1862,15 @@ app.get('/api/exams/:id/monitoring', (req, res) => {
         }
       }
     }
+
+    const scoreInfo = computeLiveStudentScore({
+      session,
+      result,
+      packageQuestions: pkg?.questions,
+      allQuestions: db.questions || [],
+      exam,
+    });
+    const showLiveScore = Boolean(exam.showLiveScore);
 
     return {
       studentId: student.id,
@@ -1982,7 +1887,9 @@ app.get('/api/exams/:id/monitoring', (req, res) => {
       violationCount,
       violations,
       hasFinished: status === 'completed',
-      finalScore: result ? result.finalScore : null,
+      finalScore: showLiveScore && result ? result.finalScore : null,
+      liveScore: showLiveScore ? scoreInfo.liveScore : null,
+      liveCorrectCount: showLiveScore ? scoreInfo.liveCorrectCount : 0,
       isPassed: result ? result.isPassed : null,
     };
   });
@@ -2006,6 +1913,8 @@ app.get('/api/exams/:id/monitoring', (req, res) => {
       durationMinutes: exam.durationMinutes,
       scheduleEnd: exam.scheduleEnd,
       kktpScore: exam.kktpScore,
+      maxScore: exam.maxScore || 100,
+      showLiveScore: Boolean(exam.showLiveScore),
     },
     summary,
     students: monitorData,
@@ -2013,7 +1922,7 @@ app.get('/api/exams/:id/monitoring', (req, res) => {
 });
 
 // Teacher action: Reset student session or add time
-app.post('/api/exams/:id/manage-student', (req, res) => {
+app.post('/api/exams/:id/manage-student', async (req, res) => {
   const { id: examId } = req.params;
   const { studentId, action, additionalMinutes } = req.body;
 
@@ -2024,12 +1933,15 @@ app.post('/api/exams/:id/manage-student', (req, res) => {
     if (session) {
       session.remainingSeconds = (session.remainingSeconds || 0) + (Number(additionalMinutes) || 10) * 60;
       saveDatabase();
+      await persistDocToFirestore('exam_sessions', sessionKey, { remainingSeconds: session.remainingSeconds });
       return res.json({ success: true, message: `Berhasil menambahkan waktu ${additionalMinutes} menit.` });
     }
   } else if (action === 'RESET_SESSION') {
     delete db.examSessions[sessionKey];
     delete db.examResults[sessionKey];
     saveDatabase();
+    await deleteDocFromFirestore('exam_sessions', sessionKey);
+    await deleteDocFromFirestore('exam_results', sessionKey);
     return res.json({ success: true, message: 'Sesi siswa berhasil direset. Siswa dapat memulai ulang.' });
   }
 
@@ -2190,7 +2102,11 @@ app.post('/api/analytics/classical', async (req, res) => {
   });
 
   if (results.length === 0) {
-    return res.status(400).json({ error: 'Belum ada peserta yang mengumpulkan ujian untuk dianalisis.' });
+    return res.json({
+      success: true,
+      analytics: null,
+      message: 'Belum ada peserta yang mengumpulkan ujian untuk dianalisis.',
+    });
   }
 
   try {
@@ -2270,81 +2186,11 @@ Tugas Analisis Klasikal:
   }
 });
 
-// Seed a completed result for siswa2 to allow immediate review and AI Analytics test
-(function seedDemoCompletedResult() {
-  const examId = 'ex-fisika-xii-01';
-  const studentId = 'usr-student-2';
-  const sessionKey = `${examId}_${studentId}`;
-
-  if (!db.examResults[sessionKey]) {
-    // Generate pkg
-    generateRandomizedStudentPackage(examId, studentId);
-
-    db.examSessions[sessionKey] = {
-      id: sessionKey,
-      examId,
-      studentId,
-      studentName: 'Siti Nur Aisyah',
-      studentNis: '20241002',
-      className: 'XII MIPA 1',
-      status: 'completed',
-      startedAt: new Date(Date.now() - 3600000).toISOString(),
-      completedAt: new Date(Date.now() - 600000).toISOString(),
-      remainingSeconds: 0,
-      currentQuestionIndex: 6,
-      answers: {
-        'q-fis-01': 'B',
-        'q-fis-02': 'B',
-        'q-fis-03': ['A', 'C'],
-        'q-fis-04': 'true',
-        'q-fis-05': 'C',
-        'q-fis-06': 'C',
-        'q-fis-07': 'A', // intentional mistake for realistic analytics
-      },
-      violationCount: 0,
-      violations: [],
-      lastHeartbeat: new Date().toISOString(),
-    };
-
-    db.examResults[sessionKey] = {
-      id: `res-${studentId}`,
-      examId,
-      studentId,
-      studentName: 'Siti Nur Aisyah',
-      studentNis: '20241002',
-      className: 'XII MIPA 1',
-      completedAt: new Date(Date.now() - 600000).toISOString(),
-      finalScore: 88,
-      isPassed: true,
-      kktpScore: 75,
-      correctCount: 6,
-      wrongCount: 1,
-      emptyCount: 0,
-      totalQuestions: 7,
-      breakdownByCognitive: {
-        LOTS: { total: 2, correct: 2 },
-        MOTS: { total: 3, correct: 2 },
-        HOTS: { total: 2, correct: 2 },
-      },
-      questionDetails: [
-        { questionId: 'q-fis-01', number: 1, cognitiveLevel: 'LOTS', subchapterId: 'sub-hukum1-termo', isCorrect: true, scoreEarned: 10, maxPoints: 10 },
-        { questionId: 'q-fis-02', number: 2, cognitiveLevel: 'MOTS', subchapterId: 'sub-hukum1-termo', isCorrect: true, scoreEarned: 10, maxPoints: 10 },
-        { questionId: 'q-fis-03', number: 3, cognitiveLevel: 'HOTS', subchapterId: 'sub-siklus-carnot', isCorrect: true, scoreEarned: 15, maxPoints: 15 },
-        { questionId: 'q-fis-04', number: 4, cognitiveLevel: 'HOTS', subchapterId: 'sub-entropi', isCorrect: true, scoreEarned: 10, maxPoints: 10 },
-        { questionId: 'q-fis-05', number: 5, cognitiveLevel: 'MOTS', subchapterId: 'sub-siklus-carnot', isCorrect: true, scoreEarned: 10, maxPoints: 10 },
-        { questionId: 'q-fis-06', number: 6, cognitiveLevel: 'LOTS', subchapterId: 'sub-efek-doppler', isCorrect: true, scoreEarned: 10, maxPoints: 10 },
-        { questionId: 'q-fis-07', number: 7, cognitiveLevel: 'MOTS', subchapterId: 'sub-efek-doppler', isCorrect: false, scoreEarned: 0, maxPoints: 10 },
-      ],
-      violationsRecorded: [],
-    };
-    saveDatabase();
-  }
-})();
-
 // -------------------------------------------------------------
 // FRONTEND SERVING & VITE INTEGRATION
 // -------------------------------------------------------------
 async function startServer() {
+  await ensureFirestoreLoaded();
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {

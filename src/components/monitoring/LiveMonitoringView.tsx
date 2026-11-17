@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { MonitoringPayload, MonitoringStudent, Exam } from '../../types/cbt';
+import { db } from '../../lib/firebase';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { useAuth } from '../../context/AuthContext';
 import {
   Activity,
   AlertTriangle,
+  Award,
   Clock,
   CheckCircle,
   XCircle,
@@ -28,6 +32,8 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
   selectedExamId,
   onOpenTokenModal,
 }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [exams, setExams] = useState<Exam[]>([]);
   const [currentExamId, setCurrentExamId] = useState<string>(selectedExamId || '');
   const [monitoringData, setMonitoringData] = useState<MonitoringPayload | null>(null);
@@ -36,6 +42,12 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<MonitoringStudent | null>(null);
   const [isManaging, setIsManaging] = useState(false);
+  const [isTogglingLiveScore, setIsTogglingLiveScore] = useState(false);
+  const selectedStudentIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    selectedStudentIdRef.current = selectedStudent?.studentId || null;
+  }, [selectedStudent]);
 
   useEffect(() => {
     loadExamsList();
@@ -48,11 +60,46 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
   }, [selectedExamId]);
 
   useEffect(() => {
-    if (currentExamId) {
-      fetchMonitoring();
-      const interval = setInterval(fetchMonitoring, 4000); // Poll every 4 seconds for live telemetry
-      return () => clearInterval(interval);
-    }
+    if (!currentExamId) return;
+    fetchMonitoring();
+    const interval = setInterval(fetchMonitoring, 4000); // Poll every 4 seconds for live telemetry
+
+    // Real-time Firestore listeners so toggle & live answers sync immediately across Admin & Teacher
+    const unsubExam = onSnapshot(
+      doc(db, 'exams', currentExamId),
+      (snap) => {
+        if (snap.exists()) {
+          const nextShow = Boolean(snap.data()?.showLiveScore);
+          setMonitoringData((prev) => {
+            if (!prev || prev.exam.id !== currentExamId) return prev;
+            if (Boolean(prev.exam.showLiveScore) === nextShow) return prev;
+            return {
+              ...prev,
+              exam: {
+                ...prev.exam,
+                showLiveScore: nextShow,
+              },
+            };
+          });
+          fetchMonitoring();
+        }
+      },
+      (err) => console.warn('[LiveMonitoring] Exam snapshot warning:', err)
+    );
+
+    const unsubSessions = onSnapshot(
+      query(collection(db, 'exam_sessions'), where('examId', '==', currentExamId)),
+      () => {
+        fetchMonitoring();
+      },
+      (err) => console.warn('[LiveMonitoring] Sessions snapshot warning:', err)
+    );
+
+    return () => {
+      clearInterval(interval);
+      unsubExam();
+      unsubSessions();
+    };
   }, [currentExamId]);
 
   const loadExamsList = async () => {
@@ -72,15 +119,50 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
     try {
       const data = await api.getMonitoringData(currentExamId);
       setMonitoringData(data);
-      if (selectedStudent) {
+      if (selectedStudentIdRef.current) {
         // Sync open student modal
-        const updated = data.students.find((s) => s.studentId === selectedStudent.studentId);
+        const updated = data.students.find((s) => s.studentId === selectedStudentIdRef.current);
         if (updated) setSelectedStudent(updated);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleLiveScore = async () => {
+    if (!isAdmin || !currentExamId || isTogglingLiveScore) return;
+    const currentVal = Boolean(monitoringData?.exam?.showLiveScore);
+    const nextVal = !currentVal;
+    setIsTogglingLiveScore(true);
+
+    // Optimistic update for responsive Admin UI
+    setMonitoringData((prev) =>
+      prev
+        ? {
+            ...prev,
+            exam: { ...prev.exam, showLiveScore: nextVal },
+          }
+        : prev
+    );
+
+    try {
+      await api.toggleLiveScore(currentExamId, nextVal);
+      await fetchMonitoring();
+    } catch (err: any) {
+      // Revert on failure
+      setMonitoringData((prev) =>
+        prev
+          ? {
+              ...prev,
+              exam: { ...prev.exam, showLiveScore: currentVal },
+            }
+          : prev
+      );
+      alert(err.message || 'Gagal mengubah tampilan nilai real-time.');
+    } finally {
+      setIsTogglingLiveScore(false);
     }
   };
 
@@ -136,6 +218,8 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
   });
 
   const activeExam = exams.find((e) => e.id === currentExamId);
+  const showLiveScore = Boolean(monitoringData?.exam?.showLiveScore);
+  const kktpScore = monitoringData?.exam?.kktpScore ?? 75;
 
   return (
     <div className="space-y-6">
@@ -152,7 +236,7 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Exam Selector Dropdown */}
           <select
             value={currentExamId}
@@ -165,6 +249,36 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
               </option>
             ))}
           </select>
+
+          {isAdmin && currentExamId && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showLiveScore}
+              disabled={isTogglingLiveScore}
+              onClick={handleToggleLiveScore}
+              className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border shadow-xs transition-colors whitespace-nowrap cursor-pointer disabled:opacity-50 ${
+                showLiveScore
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Aktifkan agar nilai murid secara real-time dapat dilihat oleh Guru dan Admin"
+            >
+              <Award className={`w-3.5 h-3.5 ${showLiveScore ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Tampilkan Nilai</span>
+              <span
+                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                  showLiveScore ? 'bg-emerald-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform shadow-xs ${
+                    showLiveScore ? 'translate-x-3.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          )}
 
           {activeExam && (
             <button
@@ -272,6 +386,7 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
                 <th className="py-3 px-4">Kelas</th>
                 <th className="py-3 px-4">Status Sesi</th>
                 <th className="py-3 px-4">Progres Pengerjaan</th>
+                {showLiveScore && <th className="py-3 px-4">Nilai Real-Time</th>}
                 <th className="py-3 px-4">Sisa Waktu</th>
                 <th className="py-3 px-4">Pelanggaran</th>
                 <th className="py-3 px-4 text-right">Aksi</th>
@@ -280,13 +395,13 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400">
+                  <td colSpan={showLiveScore ? 8 : 7} className="text-center py-10 text-slate-400">
                     Menghubungkan ke telemetri peserta...
                   </td>
                 </tr>
               ) : filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400">
+                  <td colSpan={showLiveScore ? 8 : 7} className="text-center py-10 text-slate-400">
                     Tidak ada siswa yang sesuai filter.
                   </td>
                 </tr>
@@ -356,6 +471,49 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
                           </div>
                         </div>
                       </td>
+
+                      {showLiveScore && (
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const scoreVal = s.hasFinished
+                              ? (s.finalScore ?? s.liveScore ?? null)
+                              : (s.liveScore ?? null);
+                            if (s.status === 'not_started' || scoreVal === null) {
+                              return <span className="font-mono text-slate-400">-</span>;
+                            }
+                            const isAboveKktp = scoreVal >= kktpScore;
+                            return (
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`font-mono font-bold text-sm tabular-nums ${
+                                      isAboveKktp
+                                        ? 'text-emerald-700'
+                                        : s.hasFinished
+                                        ? 'text-rose-700'
+                                        : 'text-amber-700'
+                                    }`}
+                                  >
+                                    {scoreVal}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                      s.hasFinished
+                                        ? 'bg-emerald-50 text-emerald-700'
+                                        : 'bg-indigo-50 text-indigo-700'
+                                    }`}
+                                  >
+                                    {s.hasFinished ? 'Final' : 'Live'}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {s.liveCorrectCount ?? 0} Benar
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                      )}
 
                       <td className="py-3 px-4 font-mono tabular-nums text-slate-700">
                         {s.hasFinished ? '-' : formatSeconds(s.remainingSeconds)}
@@ -440,6 +598,22 @@ export const LiveMonitoringView: React.FC<LiveMonitoringViewProps> = ({
                     {selectedStudent.answeredCount} dari {selectedStudent.totalQuestions} Butir ({selectedStudent.progressPercent}%)
                   </strong>
                 </div>
+                {showLiveScore && (
+                  <div className="col-span-2 pt-2 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-slate-500">
+                      {selectedStudent.hasFinished ? 'Nilai Akhir Siswa:' : 'Nilai Real-Time Saat Ini:'}
+                    </span>
+                    <strong className="font-mono text-sm text-indigo-700">
+                      {selectedStudent.status === 'not_started'
+                        ? '-'
+                        : `${
+                            selectedStudent.hasFinished
+                              ? selectedStudent.finalScore ?? selectedStudent.liveScore ?? 0
+                              : selectedStudent.liveScore ?? 0
+                          } (${selectedStudent.liveCorrectCount ?? 0} Benar)`}
+                    </strong>
+                  </div>
+                )}
               </div>
 
               {/* Anti-cheating incidents list */}

@@ -47,8 +47,12 @@ export const AIAnalyticsView: React.FC<AIAnalyticsViewProps> = ({ initialExamId 
 
   useEffect(() => {
     if (selectedExamId) {
-      loadExamDetails(selectedExamId);
-      runClassicalAnalytics(selectedExamId);
+      loadExamDetailsAndAnalyze(selectedExamId);
+    } else {
+      setExamResults([]);
+      setSelectedStudentId('');
+      setClassicalData(null);
+      setIndividualData(null);
     }
   }, [selectedExamId]);
 
@@ -64,15 +68,27 @@ export const AIAnalyticsView: React.FC<AIAnalyticsViewProps> = ({ initialExamId 
     }
   };
 
-  const loadExamDetails = async (examId: string) => {
+  const loadExamDetailsAndAnalyze = async (examId: string) => {
+    setClassicalData(null);
+    setIndividualData(null);
+    setExamResults([]);
+    setSelectedStudentId('');
+    setLoadingClassical(true);
+
     try {
       const res = await api.getExamResults(examId);
-      setExamResults(res.results || []);
-      if (res.results.length > 0) {
-        setSelectedStudentId(res.results[0].studentId);
+      const results = res.results || [];
+      setExamResults(results);
+
+      if (results.length > 0) {
+        setSelectedStudentId(results[0].studentId);
+        await runClassicalAnalytics(examId);
+      } else {
+        setLoadingClassical(false);
       }
     } catch (err) {
       console.error(err);
+      setLoadingClassical(false);
     }
   };
 
@@ -80,9 +96,10 @@ export const AIAnalyticsView: React.FC<AIAnalyticsViewProps> = ({ initialExamId 
     setLoadingClassical(true);
     try {
       const res = await api.runClassicalAIAnalytics(examId);
-      setClassicalData(res.analytics);
+      setClassicalData(res.analytics || null);
     } catch (err: any) {
-      console.error(err);
+      console.warn('Analisis klasikal belum tersedia:', err?.message || err);
+      setClassicalData(null);
     } finally {
       setLoadingClassical(false);
     }
@@ -93,9 +110,10 @@ export const AIAnalyticsView: React.FC<AIAnalyticsViewProps> = ({ initialExamId 
     setLoadingIndividual(true);
     try {
       const res = await api.runIndividualAIAnalytics(examId, studentId);
-      setIndividualData(res.analytics);
+      setIndividualData(res.analytics || null);
     } catch (err: any) {
-      console.error(err);
+      console.warn('Analisis individual belum tersedia:', err?.message || err);
+      setIndividualData(null);
     } finally {
       setLoadingIndividual(false);
     }
@@ -196,7 +214,9 @@ export const AIAnalyticsView: React.FC<AIAnalyticsViewProps> = ({ initialExamId 
             </div>
           ) : !classicalData ? (
             <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-xs text-slate-500">
-              Belum ada data ujian yang cukup untuk dianalisis oleh AI.
+              {examResults.length === 0
+                ? 'Belum ada peserta yang mengumpulkan ujian ini untuk dianalisis oleh AI.'
+                : 'Belum ada data ujian yang cukup untuk dianalisis oleh AI.'}
             </div>
           ) : (
             <>

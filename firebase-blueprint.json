@@ -15,6 +15,8 @@
         "nip": { "type": "string" },
         "subjectSpecialty": { "type": "string" },
         "isActive": { "type": "boolean" },
+        "plainPassword": { "type": "string" },
+        "passwordCustom": { "type": "boolean" },
         "createdAt": { "type": "string" }
       },
       "required": ["id", "username", "name", "role", "isActive"]
@@ -38,6 +40,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "code": { "type": "string", "description": "Unique question code e.g. FIS-10-0001" },
         "subjectId": { "type": "string" },
         "chapterId": { "type": "string" },
         "subchapterId": { "type": "string" },
@@ -68,6 +71,8 @@
         "isTokenActive": { "type": "boolean" },
         "status": { "type": "string" },
         "isPublishedResults": { "type": "boolean" },
+        "showLiveScore": { "type": "boolean" },
+        "scoringConfig": { "type": "object" },
         "createdTeacherId": { "type": "string" }
       },
       "required": ["id", "title", "subjectId", "durationMinutes", "token", "status"]

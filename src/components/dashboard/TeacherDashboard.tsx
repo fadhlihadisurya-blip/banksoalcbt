@@ -296,7 +296,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <td className="py-3.5 px-4">
                     <div className="font-semibold text-slate-900">{exam.title}</div>
                     <div className="text-[11px] text-slate-500 mt-0.5">
-                      Fisika · Kelas XII MIPA · {exam.cognitiveTarget?.totalQuestions || 7} Soal
+                      {exam.targetClassIds?.length || 0} Kelas Peserta · {exam.cognitiveTarget?.totalQuestions || 0} Soal
                     </div>
                   </td>
 

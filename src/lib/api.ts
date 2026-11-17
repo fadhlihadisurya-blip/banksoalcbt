@@ -74,11 +74,14 @@ export const api = {
       body: JSON.stringify(settingsData),
     }),
 
+  getActivityLogs: () =>
+    request<{ logs: Array<{ id: string; timestamp: string; actorName: string; role: string; action: string; details: string }> }>('/activity-logs'),
+
   // Auth
-  login: (username: string, password: string) =>
+  login: (username: string, password: string, portal?: 'student' | 'staff') =>
     request<{ success: boolean; user: User }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, portal }),
     }),
 
   changePassword: (userId: string, oldPassword: string, newPassword: string) =>
@@ -123,6 +126,12 @@ export const api = {
     request<{ success: boolean; count: number; message: string }>('/admin/students/bulk-import', {
       method: 'POST',
       body: JSON.stringify({ students }),
+    }),
+
+  generateStudentPasswords: (classId?: string) =>
+    request<{ success: boolean; count: number; message: string }>('/admin/students/generate-passwords', {
+      method: 'POST',
+      body: JSON.stringify({ classId: classId || '' }),
     }),
 
   getClasses: () =>
@@ -261,7 +270,14 @@ export const api = {
   validateAvailability: (payload: {
     subjectId: string;
     selectedChapterIds?: string[];
-    cognitiveTarget: { lotsCount: number; motsCount: number; hotsCount: number };
+    selectedSubchapterIds?: string[];
+    selectedCompetencyIds?: string[];
+    cognitiveTarget: {
+      lotsCount: number;
+      motsCount: number;
+      hotsCount: number;
+      perScopeTargets?: any[];
+    };
   }) =>
     request<{
       isValid: boolean;
@@ -269,6 +285,16 @@ export const api = {
       lots: { available: number; required: number; sufficient: boolean };
       mots: { available: number; required: number; sufficient: boolean };
       hots: { available: number; required: number; sufficient: boolean };
+      perScope?: Record<
+        string,
+        {
+          label?: string;
+          lots: { available: number; required: number; sufficient: boolean };
+          mots: { available: number; required: number; sufficient: boolean };
+          hots: { available: number; required: number; sufficient: boolean };
+          isValid: boolean;
+        }
+      >;
     }>('/exams/validate-availability', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -310,7 +336,14 @@ export const api = {
     request<{
       success: boolean;
       session: ExamSession;
-      exam: { id: string; title: string; subjectName: string; durationMinutes: number; antiCheating: any };
+      exam: {
+        id: string;
+        title: string;
+        subjectName: string;
+        durationMinutes: number;
+        antiCheating: any;
+        scoringConfig?: Exam['scoringConfig'];
+      };
       questions: StudentQuestionItem[];
     }>(`/exams/${examId}/start`, {
       method: 'POST',
@@ -348,6 +381,12 @@ export const api = {
   getMonitoringData: (examId: string) =>
     request<MonitoringPayload>(`/exams/${examId}/monitoring`),
 
+  toggleLiveScore: (examId: string, showLiveScore?: boolean) =>
+    request<{ success: boolean; showLiveScore: boolean }>(`/exams/${examId}/toggle-live-score`, {
+      method: 'POST',
+      body: JSON.stringify(typeof showLiveScore === 'boolean' ? { showLiveScore } : {}),
+    }),
+
   manageStudentSession: (examId: string, studentId: string, action: 'ADD_TIME' | 'RESET_SESSION', additionalMinutes?: number) =>
     request<{ success: boolean; message: string }>(`/exams/${examId}/manage-student`, {
       method: 'POST',
@@ -372,13 +411,13 @@ export const api = {
     }>(`/exams/${examId}/results`),
 
   runIndividualAIAnalytics: (examId: string, studentId: string) =>
-    request<{ success: boolean; analytics: AIIndividualAnalytics }>('/analytics/individual', {
+    request<{ success: boolean; analytics: AIIndividualAnalytics | null; message?: string }>('/analytics/individual', {
       method: 'POST',
       body: JSON.stringify({ examId, studentId }),
     }),
 
   runClassicalAIAnalytics: (examId: string) =>
-    request<{ success: boolean; analytics: AIClassicalAnalytics }>('/analytics/classical', {
+    request<{ success: boolean; analytics: AIClassicalAnalytics | null; message?: string }>('/analytics/classical', {
       method: 'POST',
       body: JSON.stringify({ examId }),
     }),

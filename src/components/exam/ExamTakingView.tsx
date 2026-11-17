@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
-import { ExamSession, StudentQuestionItem } from '../../types/cbt';
+import { Exam, ExamSession, StudentQuestionItem } from '../../types/cbt';
 import {
   Clock,
   ShieldAlert,
@@ -16,12 +16,20 @@ import {
   Check,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { RichContent } from '../common/RichContent';
 
 interface ExamTakingViewProps {
   examId: string;
   initialSession: ExamSession;
   questions: StudentQuestionItem[];
-  examMeta: { id: string; title: string; subjectName: string; durationMinutes: number; antiCheating: any };
+  examMeta: {
+    id: string;
+    title: string;
+    subjectName: string;
+    durationMinutes: number;
+    antiCheating: any;
+    scoringConfig?: Exam['scoringConfig'];
+  };
   onFinish: () => void;
 }
 
@@ -277,8 +285,11 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const hasAnswerValue = (val: any) =>
+    val !== undefined && val !== null && val !== '' && !(Array.isArray(val) && val.length === 0);
+
   const isUrgentTime = remainingSeconds < 300; // < 5 minutes
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = questions.filter((q) => hasAnswerValue(answers[q.id])).length;
   const doubtfulCount = Object.values(doubtfulFlags).filter(Boolean).length;
   const unansweredCount = questions.length - answeredCount;
 
@@ -358,9 +369,9 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               <span className="font-mono text-slate-500">{currentQ.points} Poin</span>
             </div>
 
-            {/* Question Text with formula styling */}
-            <div className="bg-slate-800/60 border border-slate-700/70 rounded-2xl p-6 text-sm sm:text-base leading-relaxed text-slate-100 whitespace-pre-wrap font-sans">
-              {currentQ.questionText}
+            {/* Question Text with formula & image styling */}
+            <div className="bg-slate-800/60 border border-slate-700/70 rounded-2xl p-6 text-sm sm:text-base leading-relaxed text-slate-100 font-sans">
+              <RichContent html={currentQ.questionText} dark />
             </div>
 
             {/* Answer Choices */}
@@ -390,7 +401,9 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                         >
                           {opt.id}
                         </span>
-                        <span className="mt-0.5 leading-relaxed">{opt.text}</span>
+                        <div className="mt-0.5 leading-relaxed min-w-0 flex-1">
+                          <RichContent html={opt.text} inline dark />
+                        </div>
                       </button>
                     );
                   })}
@@ -398,53 +411,89 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               )}
 
               {/* 2. Pilihan Ganda Kompleks (PG Kompleks Multi) */}
-              {currentQ.type === 'pg_kompleks' && currentQ.options && (
-                <div className="space-y-2.5">
-                  <div className="text-xs text-indigo-400 mb-2">
-                    *Pilihan Ganda Kompleks: Anda dapat memilih lebih dari satu jawaban yang benar.
-                  </div>
-                  {currentQ.options.map((opt) => {
-                    const currentArr = Array.isArray(answers[currentQ.id]) ? answers[currentQ.id] : [];
-                    const isSelected = currentArr.includes(opt.id);
+              {currentQ.type === 'pg_kompleks' && currentQ.options && (() => {
+                const pgKompleksMode =
+                  examMeta.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial';
+                const maxSelectable =
+                  pgKompleksMode === 'partial' &&
+                  typeof currentQ.maxSelectable === 'number' &&
+                  currentQ.maxSelectable > 0
+                    ? currentQ.maxSelectable
+                    : undefined;
+                const currentArr: string[] = Array.isArray(answers[currentQ.id])
+                  ? answers[currentQ.id]
+                  : [];
+                const isLimitReached = maxSelectable !== undefined && currentArr.length >= maxSelectable;
 
-                    const toggle = () => {
-                      if (isSelected) {
-                        handleSelectAnswer(
-                          currentQ.id,
-                          currentArr.filter((x: string) => x !== opt.id)
-                        );
-                      } else {
-                        handleSelectAnswer(currentQ.id, [...currentArr, opt.id]);
-                      }
-                    };
-
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={toggle}
-                        className={`w-full p-4 rounded-xl border text-left text-sm transition-all flex items-start gap-3 ${
-                          isSelected
-                            ? 'bg-indigo-600/30 border-indigo-500 text-white font-medium ring-1 ring-indigo-500'
-                            : 'bg-slate-800/70 border-slate-700/70 text-slate-300 hover:bg-slate-800'
-                        }`}
-                      >
-                        <div
-                          className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border ${
-                            isSelected
-                              ? 'bg-indigo-600 border-indigo-500 text-white'
-                              : 'border-slate-600 bg-slate-700'
+                return (
+                  <div className="space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs mb-2">
+                      <span className="text-indigo-400">
+                        {maxSelectable !== undefined
+                          ? `*Pilihan Ganda Kompleks (Kredit Parsial): Pilih maksimal ${maxSelectable} jawaban yang benar.`
+                          : '*Pilihan Ganda Kompleks (Benar Mutlak): Pilih semua jawaban yang benar secara tepat.'}
+                      </span>
+                      {maxSelectable !== undefined && (
+                        <span
+                          className={`px-2 py-0.5 rounded font-mono text-[11px] font-semibold ${
+                            isLimitReached
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-300 border border-slate-700'
                           }`}
                         >
-                          {isSelected && <Check className="w-4 h-4" />}
-                        </div>
-                        <span className="font-bold text-xs text-slate-400">{opt.id}.</span>
-                        <span className="leading-relaxed">{opt.text}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                          {currentArr.length} / {maxSelectable} dipilih
+                        </span>
+                      )}
+                    </div>
+                    {currentQ.options.map((opt) => {
+                      const isSelected = currentArr.includes(opt.id);
+                      const isDisabledOption = !isSelected && isLimitReached;
+
+                      const toggle = () => {
+                        if (isSelected) {
+                          handleSelectAnswer(
+                            currentQ.id,
+                            currentArr.filter((x: string) => x !== opt.id)
+                          );
+                        } else {
+                          if (isLimitReached) return;
+                          handleSelectAnswer(currentQ.id, [...currentArr, opt.id]);
+                        }
+                      };
+
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={toggle}
+                          disabled={isDisabledOption}
+                          className={`w-full p-4 rounded-xl border text-left text-sm transition-all flex items-start gap-3 ${
+                            isSelected
+                              ? 'bg-indigo-600/30 border-indigo-500 text-white font-medium ring-1 ring-indigo-500'
+                              : isDisabledOption
+                              ? 'bg-slate-800/40 border-slate-800 text-slate-500 opacity-55 cursor-not-allowed'
+                              : 'bg-slate-800/70 border-slate-700/70 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <div
+                            className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border ${
+                              isSelected
+                                ? 'bg-indigo-600 border-indigo-500 text-white'
+                                : 'border-slate-600 bg-slate-700'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-4 h-4" />}
+                          </div>
+                          <span className="font-bold text-xs text-slate-400 shrink-0 mt-0.5">{opt.id}.</span>
+                          <div className="leading-relaxed min-w-0 flex-1">
+                            <RichContent html={opt.text} inline dark />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* 3. Benar-Salah (True/False) */}
               {currentQ.type === 'benar_salah' && (
@@ -544,7 +593,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
             <div className="grid grid-cols-5 gap-2 mt-4">
               {questions.map((q, idx) => {
                 const isCurrent = idx === currentIndex;
-                const isAnswered = answers[q.id] !== undefined && answers[q.id] !== null && answers[q.id] !== '';
+                const isAnswered = hasAnswerValue(answers[q.id]);
                 const isDoubt = !!doubtfulFlags[q.id];
 
                 let btnClass = 'bg-slate-800 text-slate-400 border-slate-700'; // unanswered default

@@ -1,13 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
-import { Users, School, Database, FileQuestion, Shield, Activity, ArrowUpRight } from 'lucide-react';
+import { useSettings } from '../../context/SettingsContext';
+import { Users, School, Database, FileQuestion, Activity, ArrowUpRight } from 'lucide-react';
 import { NavTab } from '../layout/AppLayout';
 
 interface AdminDashboardProps {
   onNavigate: (tab: NavTab) => void;
 }
 
+interface ActivityLogItem {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  role: string;
+  action: string;
+  details: string;
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
+  const { settings } = useSettings();
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalStudents: 0,
@@ -16,6 +27,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     totalQuestions: 0,
     totalExams: 0,
   });
+  const [logs, setLogs] = useState<ActivityLogItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,11 +37,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const loadData = async () => {
     try {
       setLoading(true);
-      const [usersRes, classesRes, questionsRes, examsRes] = await Promise.all([
+      const [usersRes, classesRes, questionsRes, examsRes, logsRes] = await Promise.all([
         api.getUsers(),
         api.getClasses(),
         api.getQuestions(),
         api.getExams(),
+        api.getActivityLogs().catch(() => ({ logs: [] })),
       ]);
 
       const users = usersRes.users || [];
@@ -41,6 +54,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         totalQuestions: questionsRes.questions?.length || 0,
         totalExams: examsRes.exams?.length || 0,
       });
+      setLogs((logsRes.logs || []).slice(0, 5));
     } catch (err) {
       console.error(err);
     } finally {
@@ -92,11 +106,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             Pusat Kendali Administrator CBT
           </h2>
           <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-            <span>SMAN 1 Prestasi Bangsa</span>
+            <span>{settings.schoolName || 'Portal CBT Sekolah'}</span>
             <span>·</span>
-            <span>Tahun Pelajaran 2024/2025 Genap</span>
-            <span>·</span>
-            <span>Sistem Operasional Stabil</span>
+            <span>Tahun Pelajaran {settings.academicYearText || '2024/2025 Genap'}</span>
           </div>
         </div>
 
@@ -158,7 +170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Aktivitas & Log Sistem Terbaru</h3>
-              <p className="text-xs text-slate-500">Pencatatan sesi ujian, pembuatan token, dan audit pengawasan</p>
+              <p className="text-xs text-slate-500">Pencatatan sesi ujian, pembuatan token, dan audit pengawasan dari Firestore</p>
             </div>
             <button
               onClick={() => onNavigate('monitoring')}
@@ -169,44 +181,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           </div>
 
           <div className="mt-4 space-y-3">
-            <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg text-xs">
-              <Activity className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-800">Ujian Sumatif Fisika XII MIPA Dimulai</span>
-                  <span className="text-slate-400 font-mono text-[11px]">10 menit yang lalu</span>
-                </div>
-                <p className="text-slate-600 mt-0.5">
-                  Token aktif: <strong className="font-mono text-indigo-600">SMA7X9</strong> · Sesi peserta sedang berlangsung dengan deteksi anti-curang.
-                </p>
+            {loading ? (
+              <div className="py-8 text-center text-xs text-slate-400">Memuat log aktivitas...</div>
+            ) : logs.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                Belum ada log aktivitas sistem yang tercatat di Firestore.
               </div>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg text-xs">
-              <Shield className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-800">Pembaruan Keamanan Sesi Browser</span>
-                  <span className="text-slate-400 font-mono text-[11px]">35 menit yang lalu</span>
+            ) : (
+              logs.map((log) => (
+                <div key={log.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg text-xs">
+                  <Activity className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-800">{log.action} · {log.actorName}</span>
+                      <span className="text-slate-400 font-mono text-[11px]">
+                        {log.timestamp ? new Date(log.timestamp).toLocaleString('id-ID') : ''}
+                      </span>
+                    </div>
+                    <p className="text-slate-600 mt-0.5">{log.details}</p>
+                  </div>
                 </div>
-                <p className="text-slate-600 mt-0.5">
-                  Protokol Page Visibility API, Fullscreen Lock, dan Intersep Copy-Paste berhasil diuji coba.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg text-xs">
-              <Database className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-800">Sinkronisasi Bank Soal & Taksonomi</span>
-                  <span className="text-slate-400 font-mono text-[11px]">1 jam yang lalu</span>
-                </div>
-                <p className="text-slate-600 mt-0.5">
-                  11 butir soal tersertifikasi HOTS/MOTS/LOTS pada materi Fisika dan Biologi siap digunakan generator.
-                </p>
-              </div>
-            </div>
+              ))
+            )}
           </div>
         </div>
 

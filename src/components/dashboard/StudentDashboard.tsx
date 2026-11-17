@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 import { api } from '../../lib/api';
 import { StudentExamInfo } from '../../types/cbt';
 import {
@@ -21,7 +22,9 @@ interface StudentDashboardProps {
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam }) => {
   const { user } = useAuth();
+  const { settings } = useSettings();
   const [exams, setExams] = useState<StudentExamInfo[]>([]);
+  const [className, setClassName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [selectedExamForToken, setSelectedExamForToken] = useState<StudentExamInfo | null>(null);
   const [inputToken, setInputToken] = useState('');
@@ -38,8 +41,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
     try {
       setLoading(true);
       if (!user?.id) return;
-      const res = await api.getStudentExams(user.id);
-      setExams(res.exams || []);
+      const [examsRes, classesRes] = await Promise.all([
+        api.getStudentExams(user.id),
+        api.getClasses().catch(() => ({ classes: [] })),
+      ]);
+      setExams(examsRes.exams || []);
+      if (user.classId) {
+        const matchedClass = (classesRes.classes || []).find((c) => c.id === user.classId);
+        setClassName(matchedClass?.name || user.classId);
+      } else {
+        setClassName('-');
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -94,9 +106,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-0.5">
               <span>NIS: <strong className="font-mono text-slate-700">{user?.nis || '-'}</strong></span>
               <span>·</span>
-              <span>Kelas: <strong className="text-slate-700">XII MIPA 1</strong></span>
+              <span>Kelas: <strong className="text-slate-700">{className || '-'}</strong></span>
               <span>·</span>
-              <span>SMAN 1 Prestasi Bangsa</span>
+              <span>{settings.schoolName || 'Portal CBT Sekolah'}</span>
             </div>
           </div>
         </div>
@@ -257,14 +269,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                     type="text"
                     value={inputToken}
                     onChange={(e) => setInputToken(e.target.value.toUpperCase())}
-                    placeholder="Contoh: SMA7X9"
+                    placeholder="Masukkan kode token..."
                     maxLength={10}
                     className="w-full px-3 py-2.5 text-center text-lg font-bold font-mono tracking-widest uppercase border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     autoFocus
                   />
-                  <span className="text-[11px] text-slate-400 mt-1 block text-center">
-                    Token aktif demo: <code className="text-indigo-600 font-bold">SMA7X9</code>
-                  </span>
                 </div>
               )}
             </div>

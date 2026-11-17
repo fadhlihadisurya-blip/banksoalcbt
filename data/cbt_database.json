@@ -1,125 +1,885 @@
 {
   "users": [
     {
-      "id": "usr-admin-1",
-      "username": "admin",
+      "id": "usr-1794468380158-ikrg",
+      "role": "student",
+      "username": "afifah",
+      "email": "",
+      "nis": "2026410066",
+      "createdAt": "2026-11-12T07:26:20.158Z",
+      "classId": "cls-xii-mipa-2",
+      "name": "AFIFAH NOOR KAMILA RACHMAN",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "lastLogin": "2026-11-16T02:50:56.182Z"
+    },
+    {
+      "name": "AISHA HUMAIRA NADIYYA RAHMAN",
+      "username": "aisha",
+      "classId": "cls-xii-mipa-2",
+      "createdAt": "2026-11-12T07:26:20.366Z",
+      "id": "usr-1794468380366-kdvp",
+      "email": "",
+      "nis": "2026410162",
+      "isActive": true,
+      "role": "student",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "email": "",
+      "name": "ANNISA CAHAYA AMBAROSO",
+      "username": "annisa",
+      "classId": "cls-xii-mipa-2",
+      "isActive": true,
+      "createdAt": "2026-11-12T07:26:20.463Z",
+      "role": "student",
+      "nis": "2026410048",
+      "id": "usr-1794468380463-eqze",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "nis": "2026410042",
+      "username": "aqila",
+      "email": "",
+      "createdAt": "2026-11-12T07:26:20.538Z",
+      "id": "usr-1794468380538-96a7",
+      "classId": "cls-xii-mipa-2",
+      "isActive": true,
+      "name": "AQILA BATRISYIA PAHRUDIN",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "email": "",
+      "name": "AQILAH DARMADI",
+      "isActive": true,
+      "nis": "2026410309",
+      "role": "student",
+      "classId": "cls-xii-mipa-2",
+      "createdAt": "2026-11-12T07:26:20.589Z",
+      "id": "usr-1794468380589-pa96",
+      "username": "aqilah",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "id": "usr-1794468380676-znqv",
+      "classId": "cls-xii-mipa-2",
+      "createdAt": "2026-11-12T07:26:20.676Z",
+      "isActive": true,
+      "role": "student",
+      "email": "",
+      "nis": "2026410190",
+      "name": "AZKIYA KAYYASAH",
+      "username": "azkiya",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T07:26:20.732Z",
+      "name": "EILIYAH FAIZA ADANTA",
+      "isActive": true,
+      "nis": "2026410056",
+      "email": "",
+      "classId": "cls-xii-mipa-2",
+      "role": "student",
+      "id": "usr-1794468380732-g7vk",
+      "username": "eiliyah",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "classId": "cls-xii-mipa-2",
+      "createdAt": "2026-11-12T07:26:20.819Z",
+      "role": "student",
+      "nis": "2026410140",
+      "name": "FAHIMAH SALMA NAZIIHAH",
+      "id": "usr-1794468380819-ptle",
+      "username": "fahimah",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "nis": "2026410206",
+      "id": "usr-1794468380871-0dwk",
+      "createdAt": "2026-11-12T07:26:20.871Z",
+      "name": "FAIZA ADZRA",
+      "username": "faiza",
+      "email": "",
+      "role": "student",
+      "classId": "cls-xii-mipa-2",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "email": "",
+      "name": "FATIKHATUS SYIFA KHALISA GUMI",
+      "classId": "cls-xii-mipa-2",
+      "username": "fatikhatus",
+      "createdAt": "2026-11-12T07:26:20.924Z",
+      "nis": "2026410297",
+      "role": "student",
+      "id": "usr-1794468380924-dlds",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-xii-mipa-2",
+      "id": "usr-1794468380987-h0pd",
+      "username": "fatimah",
+      "role": "student",
+      "nis": "2026410008",
+      "createdAt": "2026-11-12T07:26:20.987Z",
+      "isActive": true,
+      "name": "FATIMAH AZ-ZAHRA HERRI",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "hasna",
+      "email": "",
+      "id": "usr-1794468381065-udel",
+      "name": "HASNA PUTRI AMALIA",
+      "isActive": true,
+      "nis": "2026410351",
+      "classId": "cls-xii-mipa-2",
+      "role": "student",
+      "createdAt": "2026-11-12T07:26:21.065Z",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T07:26:21.141Z",
+      "email": "",
+      "name": "HUMAIRA LATISHA AQUEENA FALLASH",
+      "username": "humaira",
+      "id": "usr-1794468381141-3ie5",
+      "nis": "2026410266",
+      "isActive": true,
+      "classId": "cls-xii-mipa-2",
+      "role": "student",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T07:26:21.187Z",
+      "nis": "2026410194",
+      "id": "usr-1794468381187-9dt8",
+      "name": "IFTINA ASSYABIYA RAFIFA",
+      "isActive": true,
+      "email": "",
+      "role": "student",
+      "classId": "cls-xii-mipa-2",
+      "username": "iftina",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-xii-mipa-2",
+      "nis": "2026410189",
+      "role": "student",
+      "id": "usr-1794468381244-1187",
+      "isActive": true,
+      "name": "ISTIFADAH AZIFA",
+      "email": "",
+      "createdAt": "2026-11-12T07:26:21.244Z",
+      "username": "istifadah",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "createdAt": "2026-11-12T07:26:21.331Z",
+      "nis": "2026410047",
+      "isActive": true,
+      "id": "usr-1794468381331-gcni",
+      "classId": "cls-xii-mipa-2",
+      "name": "KAHFIRA RASYA HEDIAN",
+      "email": "",
+      "username": "kahfira",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "nis": "2026410317",
+      "email": "",
+      "classId": "cls-xii-mipa-2",
+      "isActive": true,
+      "name": "KANSHA ADARA HUMAIRA",
+      "id": "usr-1794468381385-lasz",
+      "createdAt": "2026-11-12T07:26:21.385Z",
+      "username": "kansha",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "role": "student",
+      "nis": "2026410110",
+      "createdAt": "2026-11-12T07:26:21.436Z",
+      "username": "lafatunnisa",
+      "name": "LAFATUNNISA KAYSHIFA AZZAHRA",
+      "id": "usr-1794468381436-xhjg",
+      "classId": "cls-xii-mipa-2",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "classId": "cls-xii-mipa-2",
+      "role": "student",
+      "createdAt": "2026-11-12T07:26:21.507Z",
+      "id": "usr-1794468381507-vidh",
+      "username": "nasifa",
+      "nis": "2026410249",
+      "email": "",
+      "name": "NASIFA AIRA PUTRI FAHREZA",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "natasya",
+      "id": "usr-1794468381588-kql8",
+      "classId": "cls-xii-mipa-2",
+      "name": "NATASYA REGINA PUTRI",
+      "nis": "2026410208",
+      "isActive": true,
+      "email": "",
+      "createdAt": "2026-11-12T07:26:21.588Z",
+      "role": "student",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "createdAt": "2026-11-12T07:26:21.638Z",
+      "role": "student",
+      "id": "usr-1794468381638-kn9z",
+      "classId": "cls-xii-mipa-2",
+      "name": "NAUFA TSABITA",
+      "username": "naufa",
+      "nis": "2026410123",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "name": "NAYLA ZHAFIRA PUTRI",
+      "isActive": true,
+      "nis": "2026410011",
+      "email": "",
+      "classId": "cls-xii-mipa-2",
+      "role": "student",
+      "createdAt": "2026-11-12T07:26:21.695Z",
+      "id": "usr-1794468381695-a67r",
+      "username": "nayla",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "email": "",
+      "id": "usr-1794468381746-q4aq",
+      "createdAt": "2026-11-12T07:26:21.746Z",
+      "name": "NAZNIN FATIHA AZARIA",
+      "classId": "cls-xii-mipa-2",
+      "nis": "2026410312",
+      "username": "naznin",
+      "role": "student",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "id": "usr-1794468381797-rm3m",
+      "email": "",
+      "username": "putri",
+      "createdAt": "2026-11-12T07:26:21.797Z",
+      "nis": "2026410320",
+      "classId": "cls-xii-mipa-2",
+      "isActive": true,
+      "name": "PUTRI BILQIS AL FITRI",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-xii-mipa-2",
+      "username": "raisa",
+      "role": "student",
+      "email": "",
+      "isActive": true,
+      "name": "RAISA AMALIA SALIHA",
+      "id": "usr-1794468381847-qgok",
+      "nis": "2026410179",
+      "createdAt": "2026-11-12T07:26:21.847Z",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "role": "student",
+      "classId": "cls-xii-mipa-2",
+      "nis": "2026410114",
+      "name": "SABRINA MUMTAZ QURRATU`AIN",
+      "username": "sabrina",
+      "id": "usr-1794468381902-zlt4",
+      "createdAt": "2026-11-12T07:26:21.902Z",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "role": "student",
+      "email": "",
+      "id": "usr-1794468381948-wfoc",
+      "username": "sahla",
+      "classId": "cls-xii-mipa-2",
+      "createdAt": "2026-11-12T07:26:21.948Z",
+      "name": "SAHLA HAMIDA",
+      "nis": "2026410299",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "nis": "2026410006",
+      "id": "usr-1794468382014-ucom",
+      "role": "student",
+      "classId": "cls-xii-mipa-2",
+      "createdAt": "2026-11-12T07:26:22.014Z",
+      "isActive": true,
+      "name": "SYIFA RAMADHANI",
+      "username": "syifa",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T07:26:22.060Z",
+      "role": "student",
+      "nis": "2026410053",
+      "isActive": true,
+      "name": "SYIFFA AULIA RAHMAH",
+      "id": "usr-1794468382060-3um2",
+      "username": "syiffa",
+      "classId": "cls-xii-mipa-2",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "vallencia",
+      "classId": "cls-xii-mipa-2",
+      "name": "VALLENCIA AZZAHRA ARIWIBOWO",
+      "nis": "2026410050",
+      "id": "usr-1794468382119-t8yw",
+      "role": "student",
+      "email": "",
+      "createdAt": "2026-11-12T07:26:22.119Z",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "role": "student",
+      "classId": "cls-xii-mipa-2",
+      "email": "",
+      "createdAt": "2026-11-12T07:26:22.259Z",
+      "name": "YESSA FIORENZA ARMAN",
+      "id": "usr-1794468382259-0uj2",
+      "username": "yessa",
+      "nis": "2026410115",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "nis": "2026410060",
+      "createdAt": "2026-11-12T07:26:22.308Z",
+      "role": "student",
+      "id": "usr-1794468382308-mhko",
+      "classId": "cls-xii-mipa-2",
+      "email": "",
+      "username": "zahwa",
+      "name": "ZAHWA AZZAHRA",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "email": "",
+      "name": "AHRAS ROISAH MARYAM",
+      "classId": "cls-x-1",
+      "username": "ahras",
+      "createdAt": "2026-11-12T08:32:56.434Z",
+      "nis": "2026410209",
+      "role": "student",
+      "id": "usr-1794472376434-pxpm",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "alisha",
+      "role": "student",
+      "classId": "cls-x-1",
+      "nis": "2026410090",
+      "name": "ALISHA ZULFA RAHMI",
+      "isActive": true,
+      "createdAt": "2026-11-12T08:32:56.665Z",
+      "id": "usr-1794472376665-bte1",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "isActive": true,
+      "role": "student",
+      "id": "usr-1794472376767-95s0",
+      "name": "AMIRA LUTFIYANA SHOLIHAH",
+      "createdAt": "2026-11-12T08:32:56.767Z",
+      "nis": "2026410117",
+      "username": "amira",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "nis": "2026410239",
+      "username": "artika",
+      "id": "usr-1794472376851-gx56",
+      "email": "",
+      "classId": "cls-x-1",
+      "createdAt": "2026-11-12T08:32:56.851Z",
+      "isActive": true,
+      "name": "ARTIKA ATTAFURIZA WILYASARI",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "id": "usr-1794472376937-rzr7",
+      "nis": "2026410029",
+      "role": "student",
+      "classId": "cls-x-1",
+      "username": "azkia",
+      "email": "",
+      "isActive": true,
+      "createdAt": "2026-11-12T08:32:56.937Z",
+      "name": "AZKIA AINAYYA PUTRI FADILAH",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "username": "bintany",
+      "name": "BINTANY ZIKRA ASYFA",
+      "id": "usr-1794472377002-yxhl",
+      "createdAt": "2026-11-12T08:32:57.002Z",
+      "email": "",
+      "nis": "2026410232",
+      "isActive": true,
+      "role": "student",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "email": "",
+      "name": "FARAH SYIFA NADIA",
+      "classId": "cls-x-1",
+      "isActive": true,
+      "nis": "2026410319",
+      "role": "student",
+      "createdAt": "2026-11-12T08:32:57.068Z",
+      "id": "usr-1794472377067-mnfu",
+      "username": "farah",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "isActive": true,
+      "email": "",
+      "createdAt": "2026-11-12T08:32:57.232Z",
+      "id": "usr-1794472377232-8b1i",
+      "name": "FARASYA GHANIA PUTRI",
+      "username": "farasya",
+      "classId": "cls-x-1",
+      "nis": "2026410315",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "createdAt": "2026-11-12T08:32:57.285Z",
+      "isActive": true,
+      "role": "student",
+      "email": "",
+      "name": "FARISCA KAMILAH ALIYA",
+      "username": "farisca",
+      "id": "usr-1794472377285-sadn",
+      "nis": "2026410265",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "ghaniyah",
+      "classId": "cls-x-1",
+      "email": "",
+      "name": "GHANIYAH SALSABILA",
+      "createdAt": "2026-11-12T08:32:57.409Z",
+      "isActive": true,
+      "role": "student",
+      "id": "usr-1794472377409-4kka",
+      "nis": "2026410095",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "nis": "2026410310",
+      "username": "hanifa",
+      "name": "HANIFA SHOFI ZAHIRAH ARISANDI",
+      "id": "usr-1794472377495-4a0e",
+      "role": "student",
+      "email": "",
+      "isActive": true,
+      "classId": "cls-x-1",
+      "createdAt": "2026-11-12T08:32:57.495Z",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T08:32:57.549Z",
+      "classId": "cls-x-1",
+      "role": "student",
+      "isActive": true,
+      "email": "",
+      "nis": "2026410202",
+      "name": "HILMINA ABQARUNA GOZALI",
+      "id": "usr-1794472377549-wsni",
+      "username": "hilmina",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "nis": "2026410125",
+      "role": "student",
+      "id": "usr-1794472377602-8xqo",
+      "username": "kayyasah",
+      "createdAt": "2026-11-12T08:32:57.602Z",
+      "name": "KAYYASAH AULIA SHOLIHAH",
+      "email": "",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "classId": "cls-x-1",
+      "role": "student",
+      "createdAt": "2026-11-12T08:32:57.658Z",
+      "username": "kezia",
+      "id": "usr-1794472377658-bxr2",
+      "name": "KEZIA JANEETA SUPANDA",
+      "nis": "2026410283",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T08:32:57.707Z",
+      "isActive": true,
+      "role": "student",
+      "classId": "cls-x-1",
+      "id": "usr-1794472377707-j4w1",
+      "name": "KHANSA ALYA MUKHBITA",
+      "nis": "2026410145",
+      "username": "khansa",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T08:32:57.792Z",
+      "username": "nabila",
+      "role": "student",
+      "classId": "cls-x-1",
+      "id": "usr-1794472377792-2emf",
+      "name": "NABILA ALYA GHINASARI",
+      "isActive": true,
+      "nis": "2026410007",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "isActive": true,
+      "id": "usr-1794472377867-cyj2",
+      "createdAt": "2026-11-12T08:32:57.867Z",
+      "role": "student",
+      "nis": "2026410069",
+      "username": "naila",
+      "name": "NAILA AZKA JANNAH",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "najma",
+      "createdAt": "2026-11-12T08:32:57.946Z",
+      "role": "student",
+      "classId": "cls-x-1",
+      "id": "usr-1794472377946-4yy6",
+      "isActive": true,
+      "nis": "2026410199",
+      "name": "NAJMA TSAQIB",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "email": "",
+      "nis": "2026410163",
+      "username": "nathania",
+      "id": "usr-1794472377996-6e0l",
+      "name": "NATHANIA YUNDA AYSHA DZAHIN",
+      "isActive": true,
+      "role": "student",
+      "createdAt": "2026-11-12T08:32:57.996Z",
+      "classId": "cls-x-1",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "username": "naura",
+      "id": "usr-1794472378048-8lwv",
+      "classId": "cls-x-1",
+      "email": "",
+      "createdAt": "2026-11-12T08:32:58.048Z",
+      "nis": "2026410079",
+      "isActive": true,
+      "name": "NAURA ANINDITA KHAIRAN",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "name": "NAYRA NAZDAH HAKIM",
+      "classId": "cls-x-1",
+      "nis": "2026410017",
+      "createdAt": "2026-11-12T08:32:58.100Z",
+      "email": "",
+      "id": "usr-1794472378100-vnrq",
+      "username": "nayra",
+      "role": "student",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "id": "usr-1794472378152-cuo6",
+      "isActive": true,
+      "role": "student",
+      "classId": "cls-x-1",
+      "nis": "2026410224",
+      "username": "nisrina",
+      "createdAt": "2026-11-12T08:32:58.152Z",
+      "name": "NISRINA ATHIYYA AFLAH",
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "id": "usr-1794472378202-c3vp",
+      "nis": "2026410142",
+      "email": "",
+      "name": "NURSHAFIA NAFISATUSSALMA",
+      "createdAt": "2026-11-12T08:32:58.202Z",
+      "isActive": true,
+      "role": "student",
+      "classId": "cls-x-1",
+      "username": "nurshafia",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "username": "raihana",
+      "createdAt": "2026-11-12T08:32:58.277Z",
+      "role": "student",
+      "classId": "cls-x-1",
+      "name": "RAIHANA PUTRI SOFYAN ZAIN",
+      "id": "usr-1794472378277-okar",
+      "nis": "2026410016",
+      "isActive": true,
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "username": "rizka",
+      "role": "student",
+      "nis": "2026410184",
+      "createdAt": "2026-11-12T08:32:58.332Z",
+      "id": "usr-1794472378332-v29n",
+      "name": "RIZKA AMALIA",
+      "isActive": true,
+      "email": "",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "role": "student",
+      "nis": "2026410037",
+      "email": "",
+      "username": "saniva",
+      "name": "SANIVA AYU NUR RAHMADINA",
+      "createdAt": "2026-11-12T08:32:58.389Z",
+      "id": "usr-1794472378389-69h9",
+      "classId": "cls-x-1",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "username": "shafa",
+      "role": "student",
+      "nis": "2026410193",
+      "name": "SHAFA AULIA NURAZIZAH",
+      "isActive": true,
+      "id": "usr-1794472378437-oygm",
+      "email": "",
+      "createdAt": "2026-11-12T08:32:58.437Z",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "classId": "cls-x-1",
+      "username": "syifa",
+      "id": "usr-1794472378486-dswj",
+      "name": "SYIFA NURAINI PUTRI",
+      "createdAt": "2026-11-12T08:32:58.486Z",
+      "email": "",
+      "nis": "2026410126",
+      "role": "student",
+      "isActive": true,
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "name": "TALITHA ALTHAFUNISA PURNAMA",
+      "isActive": true,
+      "nis": "2026410073",
+      "email": "",
+      "createdAt": "2026-11-12T08:32:58.540Z",
+      "role": "student",
+      "username": "talitha",
+      "classId": "cls-x-1",
+      "id": "usr-1794472378540-5q8o",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "isActive": true,
+      "classId": "cls-x-1",
+      "createdAt": "2026-11-12T08:32:58.592Z",
+      "role": "student",
+      "email": "",
+      "id": "usr-1794472378592-79uk",
+      "username": "zahira",
+      "nis": "2026410109",
+      "updatedAt": "2026-11-12T09:10:55.679Z",
+      "name": "ZAHIRA NURUL IMANI",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "createdAt": "2026-11-12T08:32:58.644Z",
+      "role": "student",
+      "classId": "cls-x-1",
+      "username": "zhafira",
+      "email": "",
+      "nis": "2026410276",
+      "updatedAt": "2026-11-12T09:10:21.643Z",
+      "name": "ZHAFIRA LUBNA QISMIKA QOTRUNNADA",
+      "isActive": true,
+      "id": "usr-1794472378644-z079",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "name": "Fadhli hadi surya",
+      "createdAt": "2026-11-12T04:10:00.719Z",
       "passwordHash": "c8b398e3dcca41148e2c0731cb743cc3661d5a94f1242affec2fed015b1db580",
-      "name": "Drs. Hendro Wibowo, M.Pd.",
-      "role": "admin",
+      "isActive": true,
       "email": "admin@sman1prestasi.sch.id",
-      "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z",
-      "lastLogin": "2026-11-12T05:20:38.167Z"
+      "lastLogin": "2026-11-16T02:50:56.027Z",
+      "id": "usr-admin-1",
+      "role": "admin",
+      "username": "admin",
+      "updatedAt": "2026-11-16T02:21:22.328Z"
     },
     {
-      "id": "usr-teacher-1",
-      "username": "guru",
-      "passwordHash": "a69e4e0141d9286544d60f4213011250bd0e5eba48b73776a86d234a33c59486",
-      "name": "Ahmad Fauzi, S.Pd., M.Si.",
-      "role": "teacher",
-      "email": "ahmad.fauzi@sman1prestasi.sch.id",
-      "nip": "198403152009021004",
-      "subjectSpecialty": "Fisika & Matematika IPA",
-      "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z",
-      "lastLogin": "2026-11-12T05:20:40.186Z"
-    },
-    {
-      "id": "usr-teacher-2",
-      "username": "gurubio",
-      "passwordHash": "a69e4e0141d9286544d60f4213011250bd0e5eba48b73776a86d234a33c59486",
-      "name": "Dra. Sri Wahyuni, M.Biotech",
-      "role": "teacher",
-      "email": "sri.wahyuni@sman1prestasi.sch.id",
-      "nip": "197908122005012003",
-      "subjectSpecialty": "Biologi SMA",
-      "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z"
-    },
-    {
+      "role": "student",
+      "lastLogin": "2026-11-12T05:20:46.386Z",
       "id": "usr-student-1",
+      "classId": "cls-xii-mipa-1",
+      "nisn": "0061234501",
+      "isActive": true,
+      "gender": "L",
+      "nis": "20241001",
       "username": "siswa1",
       "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "createdAt": "2026-11-12T04:10:00.719Z",
       "name": "Ahmad Rifai",
+      "email": "rifai.ahmad@siswa.sman1.sch.id"
+    },
+    {
+      "email": "siti.aisyah@siswa.sman1.sch.id",
+      "id": "usr-student-2",
+      "nis": "20241002",
+      "username": "siswa2",
+      "name": "Siti Nur Aisyah",
+      "nisn": "0061234502",
       "role": "student",
-      "nis": "20241001",
-      "nisn": "0061234501",
-      "classId": "cls-xii-mipa-1",
-      "gender": "L",
-      "email": "rifai.ahmad@siswa.sman1.sch.id",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
       "isActive": true,
       "createdAt": "2026-11-12T04:10:00.719Z",
-      "lastLogin": "2026-11-12T05:20:46.386Z"
-    },
-    {
-      "id": "usr-student-2",
-      "username": "siswa2",
-      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
-      "name": "Siti Nur Aisyah",
-      "role": "student",
-      "nis": "20241002",
-      "nisn": "0061234502",
       "classId": "cls-xii-mipa-1",
-      "gender": "P",
-      "email": "siti.aisyah@siswa.sman1.sch.id",
-      "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z"
+      "gender": "P"
     },
     {
-      "id": "usr-student-3",
-      "username": "siswa3",
-      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
-      "name": "Bintang Pratama",
-      "role": "student",
+      "email": "bintang.pratama@siswa.sman1.sch.id",
       "nis": "20241003",
       "nisn": "0061234503",
-      "classId": "cls-xii-mipa-1",
-      "gender": "L",
-      "email": "bintang.pratama@siswa.sman1.sch.id",
-      "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z"
-    },
-    {
-      "id": "usr-student-4",
-      "username": "siswa4",
+      "name": "Bintang Pratama",
+      "id": "usr-student-3",
       "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
-      "name": "Nabila Zahra",
-      "role": "student",
-      "nis": "20241004",
-      "nisn": "0061234504",
-      "classId": "cls-xii-mipa-1",
-      "gender": "P",
-      "email": "nabila.zahra@siswa.sman1.sch.id",
       "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z"
+      "role": "student",
+      "username": "siswa3",
+      "classId": "cls-xii-mipa-1",
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "gender": "L"
     },
     {
-      "id": "usr-student-5",
+      "gender": "P",
+      "role": "student",
+      "isActive": true,
+      "id": "usr-student-4",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
+      "email": "nabila.zahra@siswa.sman1.sch.id",
+      "classId": "cls-xii-mipa-1",
+      "nis": "20241004",
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "nisn": "0061234504",
+      "name": "Nabila Zahra",
+      "username": "siswa4"
+    },
+    {
+      "classId": "cls-xii-mipa-2",
+      "gender": "L",
       "username": "siswa5",
       "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
-      "name": "Dimas Arya Putra",
       "role": "student",
-      "nis": "20241005",
-      "nisn": "0061234505",
-      "classId": "cls-xii-mipa-2",
-      "gender": "L",
-      "email": "dimas.arya@siswa.sman1.sch.id",
       "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z"
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "nisn": "0061234505",
+      "name": "Dimas Arya Putra",
+      "email": "dimas.arya@siswa.sman1.sch.id",
+      "id": "usr-student-5",
+      "nis": "20241005"
     },
     {
-      "id": "usr-student-6",
-      "username": "siswa6",
-      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1",
-      "name": "Farhan Maulana",
-      "role": "student",
-      "nis": "20241006",
       "nisn": "0061234506",
-      "classId": "cls-xii-mipa-2",
-      "gender": "L",
       "email": "farhan.m@siswa.sman1.sch.id",
+      "name": "Farhan Maulana",
+      "classId": "cls-xii-mipa-2",
+      "username": "siswa6",
+      "nis": "20241006",
+      "gender": "L",
       "isActive": true,
-      "createdAt": "2026-11-12T04:10:00.719Z"
+      "role": "student",
+      "id": "usr-student-6",
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "passwordHash": "2fb918c57a680394be86269eda6a3863ff4d8313adcfa8e4ac958813ef26f2f1"
+    },
+    {
+      "lastLogin": "2026-11-16T02:50:56.126Z",
+      "subjectSpecialty": "Fisika & Matematika IPA",
+      "email": "ahmad.fauzi@sman1prestasi.sch.id",
+      "name": "Ahmad Fauzi, S.Pd., M.Si.",
+      "passwordHash": "a69e4e0141d9286544d60f4213011250bd0e5eba48b73776a86d234a33c59486",
+      "isActive": true,
+      "role": "teacher",
+      "nip": "198403152009021004",
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "id": "usr-teacher-1",
+      "username": "guru"
+    },
+    {
+      "nip": "197908122005012003",
+      "createdAt": "2026-11-12T04:10:00.719Z",
+      "username": "gurubio",
+      "subjectSpecialty": "Biologi SMA",
+      "role": "teacher",
+      "email": "sri.wahyuni@sman1prestasi.sch.id",
+      "isActive": true,
+      "id": "usr-teacher-2",
+      "name": "Dra. Sri Wahyuni, M.Biotech",
+      "passwordHash": "a69e4e0141d9286544d60f4213011250bd0e5eba48b73776a86d234a33c59486"
     }
   ],
   "academicYears": [
@@ -138,80 +898,70 @@
   ],
   "classes": [
     {
+      "id": "cls-1794465653719",
+      "gradeLevel": "X",
+      "name": "10 Asiah",
+      "homeroomTeacher": "",
+      "academicYearId": "ay-2024-genap"
+    },
+    {
       "id": "cls-x-1",
+      "homeroomTeacher": "Siti Rahma, S.Pd.",
       "gradeLevel": "X",
       "name": "X-1 (Fase E)",
-      "academicYearId": "ay-2024-genap",
-      "homeroomTeacher": "Siti Rahma, S.Pd."
+      "academicYearId": "ay-2024-genap"
     },
     {
       "id": "cls-xi-f1",
-      "gradeLevel": "XI",
-      "name": "XI-F1 (Fase F MIPA)",
       "academicYearId": "ay-2024-genap",
-      "homeroomTeacher": "Bambang Sudibyo, M.Pd."
+      "homeroomTeacher": "Bambang Sudibyo, M.Pd.",
+      "gradeLevel": "XI",
+      "name": "XI-F1 (Fase F MIPA)"
+    },
+    {
+      "id": "cls-xii-ips-1",
+      "academicYearId": "ay-2024-genap",
+      "name": "XII IPS 1",
+      "gradeLevel": "XII",
+      "homeroomTeacher": "Drs. H. Mulyadi"
     },
     {
       "id": "cls-xii-mipa-1",
       "gradeLevel": "XII",
       "name": "XII MIPA 1",
-      "academicYearId": "ay-2024-genap",
-      "homeroomTeacher": "Ahmad Fauzi, S.Pd., M.Si."
+      "homeroomTeacher": "Ahmad Fauzi, S.Pd., M.Si.",
+      "academicYearId": "ay-2024-genap"
     },
     {
       "id": "cls-xii-mipa-2",
+      "academicYearId": "ay-2024-genap",
       "gradeLevel": "XII",
       "name": "XII MIPA 2",
-      "academicYearId": "ay-2024-genap",
       "homeroomTeacher": "Dra. Sri Wahyuni, M.Biotech"
-    },
-    {
-      "id": "cls-xii-ips-1",
-      "gradeLevel": "XII",
-      "name": "XII IPS 1",
-      "academicYearId": "ay-2024-genap",
-      "homeroomTeacher": "Drs. H. Mulyadi"
-    },
-    {
-      "id": "cls-1794465653719",
-      "gradeLevel": "X",
-      "name": "10 Asiah",
-      "academicYearId": "ay-2024-genap",
-      "homeroomTeacher": ""
     }
   ],
   "subjects": [
     {
-      "id": "sbj-fisika",
-      "name": "Fisika",
-      "code": "FIS-SMA-XII"
+      "id": "sbj-1794796377455",
+      "code": "FIS-SMA-X",
+      "name": "Fisika 10"
     },
     {
       "id": "sbj-biologi",
-      "name": "Biologi",
-      "code": "BIO-SMA-XII"
+      "name": "Fisika 11",
+      "code": "FIS-SMA-XI"
     },
     {
-      "id": "sbj-matematika",
-      "name": "Matematika Peminatan",
-      "code": "MAT-SMA-XII"
-    },
-    {
-      "id": "sbj-kimia",
-      "name": "Kimia",
-      "code": "KIM-SMA-XII"
+      "id": "sbj-fisika",
+      "name": "Fisika 12",
+      "code": "FIS-SMA-XII"
     }
   ],
   "chapters": [
     {
-      "id": "ch-termo",
-      "subjectId": "sbj-fisika",
-      "name": "Termodinamika dan Hukum Gas Ideal"
-    },
-    {
       "id": "ch-gelombang",
-      "subjectId": "sbj-fisika",
-      "name": "Gelombang Mekanik & Bunyi"
+      "name": "Gelombang Mekanik & Bunyi",
+      "subjectId": "sbj-fisika"
     },
     {
       "id": "ch-genetika",
@@ -219,375 +969,55 @@
       "name": "Hukum Mendel dan Pola Hereditas"
     },
     {
-      "id": "ch-kalkulus",
-      "subjectId": "sbj-matematika",
-      "name": "Turunan dan Integral Fungsi Trigonometri"
+      "id": "ch-termo",
+      "subjectId": "sbj-fisika",
+      "name": "Termodinamika dan Hukum Gas Ideal"
     }
   ],
-  "subchapters": [
-    {
-      "id": "sub-hukum1-termo",
-      "chapterId": "ch-termo",
-      "name": "Hukum I Termodinamika & Usaha Gas"
-    },
-    {
-      "id": "sub-siklus-carnot",
-      "chapterId": "ch-termo",
-      "name": "Siklus Carnot dan Efisiensi Mesin Kalor"
-    },
-    {
-      "id": "sub-entropi",
-      "chapterId": "ch-termo",
-      "name": "Entropi dan Hukum II Termodinamika"
-    },
-    {
-      "id": "sub-efek-doppler",
-      "chapterId": "ch-gelombang",
-      "name": "Efek Doppler dan Intensitas Bunyi"
-    },
-    {
-      "id": "sub-persilangan-dihibrid",
-      "chapterId": "ch-genetika",
-      "name": "Persilangan Monohibrid dan Dihibrid"
-    },
-    {
-      "id": "sub-turunan-trigo",
-      "chapterId": "ch-kalkulus",
-      "name": "Turunan Pertama dan Nilai Ekstrim Trigonometri"
-    }
-  ],
-  "competencies": [
-    {
-      "id": "cmp-3.6.1",
-      "subchapterId": "sub-hukum1-termo",
-      "code": "KD 3.6.1",
-      "description": "Menghitung usaha yang dilakukan gas pada proses isobarik, isotermik, dan isokhorik"
-    },
-    {
-      "id": "cmp-3.6.2",
-      "subchapterId": "sub-siklus-carnot",
-      "code": "KD 3.6.2",
-      "description": "Menganalisis prinsip kerja mesin Carnot dan menghitung efisiensi termal maksimum"
-    },
-    {
-      "id": "cmp-3.6.3",
-      "subchapterId": "sub-entropi",
-      "code": "KD 3.6.3",
-      "description": "Mengevaluasi perubahan entropi sistem tertutup dan kelayakan proses termodinamika"
-    },
-    {
-      "id": "cmp-3.8.1",
-      "subchapterId": "sub-efek-doppler",
-      "code": "KD 3.8.1",
-      "description": "Menganalisis pergeseran frekuensi bunyi akibat gerak relatif sumber dan pendengar"
-    },
-    {
-      "id": "cmp-3.5.1",
-      "subchapterId": "sub-persilangan-dihibrid",
-      "code": "KD 3.5.1",
-      "description": "Menentukan rasio fenotip dan genotip F2 pada persilangan dihibrid dominan penuh"
-    }
-  ],
+  "subchapters": [],
+  "competencies": [],
   "questions": [
     {
-      "id": "q-fis-01",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-termo",
-      "subchapterId": "sub-hukum1-termo",
-      "competencyId": "cmp-3.6.1",
-      "cognitiveLevel": "LOTS",
-      "type": "pg",
-      "questionText": "Pada proses termodinamika di mana volume sistem gas dijaga konstan (isokhorik), berapakah besar usaha (W) yang dilakukan oleh gas?",
-      "options": [
-        {
-          "id": "A",
-          "text": "W = P · ΔV"
-        },
-        {
-          "id": "B",
-          "text": "W = 0"
-        },
-        {
-          "id": "C",
-          "text": "W = n · R · T · ln(V2/V1)"
-        },
-        {
-          "id": "D",
-          "text": "W = Q - ΔU"
-        },
-        {
-          "id": "E",
-          "text": "W = Tak hingga"
-        }
-      ],
-      "correctAnswer": "B",
-      "points": 10,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-02",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-termo",
-      "subchapterId": "sub-hukum1-termo",
-      "competencyId": "cmp-3.6.1",
-      "cognitiveLevel": "MOTS",
-      "type": "pg",
-      "questionText": "Suatu gas ideal berada dalam ruang tertutup bertekanan tetap 2 × 10⁵ Pa. Jika gas dipanaskan sehingga memuai dari volume 1,5 m³ menjadi 2,5 m³, besar usaha yang dilakukan gas adalah ...",
-      "options": [
-        {
-          "id": "A",
-          "text": "1,0 × 10⁵ Joule"
-        },
-        {
-          "id": "B",
-          "text": "2,0 × 10⁵ Joule"
-        },
-        {
-          "id": "C",
-          "text": "3,0 × 10⁵ Joule"
-        },
-        {
-          "id": "D",
-          "text": "4,0 × 10⁵ Joule"
-        },
-        {
-          "id": "E",
-          "text": "5,0 × 10⁵ Joule"
-        }
-      ],
-      "correctAnswer": "B",
-      "points": 10,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-03",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-termo",
-      "subchapterId": "sub-siklus-carnot",
-      "competencyId": "cmp-3.6.2",
-      "cognitiveLevel": "HOTS",
-      "type": "pg_kompleks",
-      "questionText": "Sebuah mesin pendingin Carnot beroperasi di antara tandon suhu tinggi T₁ = 300 K dan tandon suhu rendah T₂ = 240 K. Manakah pernyataan berikut yang BENAR terkait mesin tersebut? (Pilih semua yang sesuai)",
-      "options": [
-        {
-          "id": "A",
-          "text": "Koefisien performansi (COP) mesin tersebut bernilai 4"
-        },
-        {
-          "id": "B",
-          "text": "Jika suhu tandon rendah diturunkan menjadi 200 K, nilai COP akan meningkat"
-        },
-        {
-          "id": "C",
-          "text": "Efisiensi termal mesin Carnot teoritis maksimum yang bekerja pada rentang suhu tersebut adalah 20%"
-        },
-        {
-          "id": "D",
-          "text": "Mesin pendingin tersebut melanggar Hukum II Termodinamika karena memindahkan kalor ke tandon suhu tinggi"
-        }
-      ],
-      "correctAnswer": [
-        "A",
-        "C"
-      ],
-      "points": 15,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-04",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-termo",
-      "subchapterId": "sub-entropi",
-      "competencyId": "cmp-3.6.3",
-      "cognitiveLevel": "HOTS",
-      "type": "benar_salah",
-      "questionText": "Tentukan kebenaran dari pernyataan termodinamika berikut berdasarkan Hukum II Termodinamika:\n\n\"Pada proses adiabatik ireversibel dalam sistem terisolasi, total entropi alam semesta selalu meningkat (ΔS > 0).\"",
-      "options": [
-        {
-          "id": "true",
-          "text": "BENAR"
-        },
-        {
-          "id": "false",
-          "text": "SALAH"
-        }
-      ],
-      "correctAnswer": "true",
-      "points": 10,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-05",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-termo",
-      "subchapterId": "sub-siklus-carnot",
-      "competencyId": "cmp-3.6.2",
-      "cognitiveLevel": "MOTS",
-      "type": "pg",
-      "questionText": "Suatu mesin kalor Carnot menyerap kalor sebesar 800 J dari tandon suhu tinggi 600 K dan membuang sebagian kalor ke tandon suhu rendah 300 K. Berapakah usaha yang dihasilkan oleh mesin dalam satu siklus?",
-      "options": [
-        {
-          "id": "A",
-          "text": "200 Joule"
-        },
-        {
-          "id": "B",
-          "text": "300 Joule"
-        },
-        {
-          "id": "C",
-          "text": "400 Joule"
-        },
-        {
-          "id": "D",
-          "text": "500 Joule"
-        },
-        {
-          "id": "E",
-          "text": "600 Joule"
-        }
-      ],
-      "correctAnswer": "C",
-      "points": 10,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-06",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-gelombang",
-      "subchapterId": "sub-efek-doppler",
-      "competencyId": "cmp-3.8.1",
-      "cognitiveLevel": "LOTS",
-      "type": "pg",
-      "questionText": "Peristiwa perubahan frekuensi bunyi yang terdengar oleh pengamat akibat gerak relatif antara sumber bunyi dan pengamat dikenal sebagai fenomena ...",
-      "options": [
-        {
-          "id": "A",
-          "text": "Difraksi Gelombang"
-        },
-        {
-          "id": "B",
-          "text": "Interferensi Konstruktif"
-        },
-        {
-          "id": "C",
-          "text": "Efek Doppler"
-        },
-        {
-          "id": "D",
-          "text": "Polarisasi Bunyi"
-        },
-        {
-          "id": "E",
-          "text": "Dispersi Akustik"
-        }
-      ],
-      "correctAnswer": "C",
-      "points": 10,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-07",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-gelombang",
-      "subchapterId": "sub-efek-doppler",
-      "competencyId": "cmp-3.8.1",
-      "cognitiveLevel": "MOTS",
-      "type": "pg",
-      "questionText": "Sebuah mobil ambulans bergerak dengan kelajuan 20 m/s membunyikan sirine berfrekuensi 640 Hz mendekati seorang siswa yang diam di halte. Jika cepat rambat bunyi di udara 340 m/s, frekuensi sirine yang didengar oleh siswa adalah ...",
-      "options": [
-        {
-          "id": "A",
-          "text": "600 Hz"
-        },
-        {
-          "id": "B",
-          "text": "640 Hz"
-        },
-        {
-          "id": "C",
-          "text": "680 Hz"
-        },
-        {
-          "id": "D",
-          "text": "720 Hz"
-        },
-        {
-          "id": "E",
-          "text": "760 Hz"
-        }
-      ],
-      "correctAnswer": "C",
-      "points": 10,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
-      "id": "q-fis-08",
-      "subjectId": "sbj-fisika",
-      "chapterId": "ch-termo",
-      "subchapterId": "sub-siklus-carnot",
-      "competencyId": "cmp-3.6.2",
-      "cognitiveLevel": "HOTS",
-      "type": "esai",
-      "questionText": "Sebuah pabrik pembangkit listrik tenaga uap (PLTU) berencana meningkatkan efisiensi turbin uapnya dari 35% menjadi 45%. Jelaskan minimal 2 strategi termodinamika realistis berdasarkan konsep Siklus Rankine/Carnot beserta konsekuensi teknis dan keselamatan sistemnya.",
-      "rubric": "Kriteria penilaian: 1. Penjelasan kenaikan suhu boiler / penurunan suhu kondensor (40%), 2. Analisis termal efisiensi (30%), 3. Konsekuensi teknis material tahan tekanan tinggi/korosi (30%).",
-      "correctAnswer": "Menaikkan temperatur uap masuk turbin (T1) dan menurunkan temperatur kondensor (T2) menggunakan pendingin air dan menara pendingin efisien, dengan memperhatikan batasan metalurgi turbin.",
-      "points": 20,
-      "status": "active",
-      "author": "Ahmad Fauzi, S.Pd."
-    },
-    {
       "id": "q-bio-01",
-      "subjectId": "sbj-biologi",
-      "chapterId": "ch-genetika",
+      "status": "active",
+      "type": "pg",
+      "author": "Dra. Sri Wahyuni",
       "subchapterId": "sub-persilangan-dihibrid",
+      "questionText": "Pada persilangan monohibrid tanaman kacang ercis berbiji bulat (BB) dengan berbiji kisut (bb), jika sifat bulat dominan penuh terhadap kisut, maka fenotip keturunan F1 seluruhnya adalah ...",
+      "correctAnswer": "A",
+      "subjectId": "sbj-biologi",
       "competencyId": "cmp-3.5.1",
       "cognitiveLevel": "LOTS",
-      "type": "pg",
-      "questionText": "Pada persilangan monohibrid tanaman kacang ercis berbiji bulat (BB) dengan berbiji kisut (bb), jika sifat bulat dominan penuh terhadap kisut, maka fenotip keturunan F1 seluruhnya adalah ...",
+      "chapterId": "ch-genetika",
+      "points": 10,
       "options": [
         {
           "id": "A",
           "text": "100% Berbiji Bulat"
         },
         {
-          "id": "B",
-          "text": "100% Berbiji Kisut"
+          "text": "100% Berbiji Kisut",
+          "id": "B"
         },
         {
-          "id": "C",
-          "text": "50% Bulat, 50% Kisut"
+          "text": "50% Bulat, 50% Kisut",
+          "id": "C"
         },
         {
-          "id": "D",
-          "text": "75% Bulat, 25% Kisut"
+          "text": "75% Bulat, 25% Kisut",
+          "id": "D"
         },
         {
-          "id": "E",
-          "text": "25% Bulat, 75% Kisut"
+          "text": "25% Bulat, 75% Kisut",
+          "id": "E"
         }
-      ],
-      "correctAnswer": "A",
-      "points": 10,
-      "status": "active",
-      "author": "Dra. Sri Wahyuni"
+      ]
     },
     {
       "id": "q-bio-02",
-      "subjectId": "sbj-biologi",
-      "chapterId": "ch-genetika",
-      "subchapterId": "sub-persilangan-dihibrid",
       "competencyId": "cmp-3.5.1",
-      "cognitiveLevel": "MOTS",
-      "type": "pg",
       "questionText": "Pada persilangan dihibrid antara tanaman ercis berbiji bulat warna kuning heterozigot (BbKk) dengan sesamanya, peluang diperolehnya tanaman berbiji keriput warna hijau (bbkk) pada F2 adalah ...",
+      "correctAnswer": "C",
       "options": [
         {
           "id": "A",
@@ -610,74 +1040,342 @@
           "text": "1/8"
         }
       ],
-      "correctAnswer": "C",
+      "chapterId": "ch-genetika",
+      "subchapterId": "sub-persilangan-dihibrid",
       "points": 10,
-      "status": "active",
-      "author": "Dra. Sri Wahyuni"
+      "type": "pg",
+      "subjectId": "sbj-biologi",
+      "cognitiveLevel": "MOTS",
+      "author": "Dra. Sri Wahyuni",
+      "status": "active"
     },
     {
       "id": "q-bio-03",
-      "subjectId": "sbj-biologi",
-      "chapterId": "ch-genetika",
-      "subchapterId": "sub-persilangan-dihibrid",
       "competencyId": "cmp-3.5.1",
-      "cognitiveLevel": "HOTS",
-      "type": "pg_kompleks",
       "questionText": "Suatu eksperimen pemuliaan tanaman padi menghasilkan data keturunan F2 yang menyimpang dari rasio Mendel 9:3:3:1 menjadi 9:7. Manakah penjelasan biologis yang paling tepat mengenai fenomena ini? (Pilih semua jawaban benar)",
-      "options": [
-        {
-          "id": "A",
-          "text": "Terjadi peristiwa interaksi antargen berupa komplementer"
-        },
-        {
-          "id": "B",
-          "text": "Kedua gen dominan harus hadir bersama-sama agar sifat fenotip muncul"
-        },
-        {
-          "id": "C",
-          "text": "Terjadi mutasi gen tunggal secara acak pada generasi F1"
-        },
-        {
-          "id": "D",
-          "text": "Gen resesif homozigot pada salah satu lokus menghambat ekspresi fenotip"
-        }
-      ],
       "correctAnswer": [
         "A",
         "B",
         "D"
       ],
+      "options": [
+        {
+          "text": "Terjadi peristiwa interaksi antargen berupa komplementer",
+          "id": "A"
+        },
+        {
+          "text": "Kedua gen dominan harus hadir bersama-sama agar sifat fenotip muncul",
+          "id": "B"
+        },
+        {
+          "text": "Terjadi mutasi gen tunggal secara acak pada generasi F1",
+          "id": "C"
+        },
+        {
+          "text": "Gen resesif homozigot pada salah satu lokus menghambat ekspresi fenotip",
+          "id": "D"
+        }
+      ],
+      "subchapterId": "sub-persilangan-dihibrid",
+      "chapterId": "ch-genetika",
       "points": 15,
+      "type": "pg_kompleks",
+      "subjectId": "sbj-biologi",
+      "cognitiveLevel": "HOTS",
+      "author": "Dra. Sri Wahyuni",
+      "status": "active"
+    },
+    {
+      "id": "q-fis-01",
+      "questionText": "Pada proses termodinamika di mana volume sistem gas dijaga konstan (isokhorik), berapakah besar usaha (W) yang dilakukan oleh gas?",
+      "chapterId": "ch-termo",
+      "author": "Ahmad Fauzi, S.Pd.",
       "status": "active",
-      "author": "Dra. Sri Wahyuni"
+      "competencyId": "cmp-3.6.1",
+      "cognitiveLevel": "LOTS",
+      "correctAnswer": "B",
+      "subchapterId": "sub-hukum1-termo",
+      "points": 10,
+      "options": [
+        {
+          "id": "A",
+          "text": "W = P · ΔV"
+        },
+        {
+          "text": "W = 0",
+          "id": "B"
+        },
+        {
+          "text": "W = n · R · T · ln(V2/V1)",
+          "id": "C"
+        },
+        {
+          "text": "W = Q - ΔU",
+          "id": "D"
+        },
+        {
+          "id": "E",
+          "text": "W = Tak hingga"
+        }
+      ],
+      "subjectId": "sbj-fisika",
+      "type": "pg"
+    },
+    {
+      "id": "q-fis-02",
+      "competencyId": "cmp-3.6.1",
+      "questionText": "Suatu gas ideal berada dalam ruang tertutup bertekanan tetap 2 × 10⁵ Pa. Jika gas dipanaskan sehingga memuai dari volume 1,5 m³ menjadi 2,5 m³, besar usaha yang dilakukan gas adalah ...",
+      "subchapterId": "sub-hukum1-termo",
+      "points": 10,
+      "chapterId": "ch-termo",
+      "subjectId": "sbj-fisika",
+      "cognitiveLevel": "MOTS",
+      "correctAnswer": "B",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "options": [
+        {
+          "id": "A",
+          "text": "1,0 × 10⁵ Joule"
+        },
+        {
+          "text": "2,0 × 10⁵ Joule",
+          "id": "B"
+        },
+        {
+          "text": "3,0 × 10⁵ Joule",
+          "id": "C"
+        },
+        {
+          "id": "D",
+          "text": "4,0 × 10⁵ Joule"
+        },
+        {
+          "text": "5,0 × 10⁵ Joule",
+          "id": "E"
+        }
+      ],
+      "type": "pg",
+      "status": "active"
+    },
+    {
+      "id": "q-fis-03",
+      "subjectId": "sbj-fisika",
+      "points": 15,
+      "subchapterId": "sub-siklus-carnot",
+      "questionText": "Sebuah mesin pendingin Carnot beroperasi di antara tandon suhu tinggi T₁ = 300 K dan tandon suhu rendah T₂ = 240 K. Manakah pernyataan berikut yang BENAR terkait mesin tersebut? (Pilih semua yang sesuai)",
+      "status": "active",
+      "correctAnswer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "id": "A",
+          "text": "Koefisien performansi (COP) mesin tersebut bernilai 4"
+        },
+        {
+          "text": "Jika suhu tandon rendah diturunkan menjadi 200 K, nilai COP akan meningkat",
+          "id": "B"
+        },
+        {
+          "id": "C",
+          "text": "Efisiensi termal mesin Carnot teoritis maksimum yang bekerja pada rentang suhu tersebut adalah 20%"
+        },
+        {
+          "id": "D",
+          "text": "Mesin pendingin tersebut melanggar Hukum II Termodinamika karena memindahkan kalor ke tandon suhu tinggi"
+        }
+      ],
+      "chapterId": "ch-termo",
+      "competencyId": "cmp-3.6.2",
+      "cognitiveLevel": "HOTS",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "type": "pg_kompleks"
+    },
+    {
+      "id": "q-fis-04",
+      "questionText": "Tentukan kebenaran dari pernyataan termodinamika berikut berdasarkan Hukum II Termodinamika:\n\n\"Pada proses adiabatik ireversibel dalam sistem terisolasi, total entropi alam semesta selalu meningkat (ΔS > 0).\"",
+      "chapterId": "ch-termo",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "status": "active",
+      "competencyId": "cmp-3.6.3",
+      "cognitiveLevel": "HOTS",
+      "correctAnswer": "true",
+      "subchapterId": "sub-entropi",
+      "points": 10,
+      "options": [
+        {
+          "id": "true",
+          "text": "BENAR"
+        },
+        {
+          "text": "SALAH",
+          "id": "false"
+        }
+      ],
+      "type": "benar_salah",
+      "subjectId": "sbj-fisika"
+    },
+    {
+      "id": "q-fis-05",
+      "type": "pg",
+      "cognitiveLevel": "MOTS",
+      "subjectId": "sbj-fisika",
+      "status": "active",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "options": [
+        {
+          "id": "A",
+          "text": "200 Joule"
+        },
+        {
+          "id": "B",
+          "text": "300 Joule"
+        },
+        {
+          "id": "C",
+          "text": "400 Joule"
+        },
+        {
+          "id": "D",
+          "text": "500 Joule"
+        },
+        {
+          "id": "E",
+          "text": "600 Joule"
+        }
+      ],
+      "chapterId": "ch-termo",
+      "subchapterId": "sub-siklus-carnot",
+      "questionText": "Suatu mesin kalor Carnot menyerap kalor sebesar 800 J dari tandon suhu tinggi 600 K dan membuang sebagian kalor ke tandon suhu rendah 300 K. Berapakah usaha yang dihasilkan oleh mesin dalam satu siklus?",
+      "correctAnswer": "C",
+      "points": 10,
+      "competencyId": "cmp-3.6.2"
+    },
+    {
+      "id": "q-fis-06",
+      "cognitiveLevel": "LOTS",
+      "competencyId": "cmp-3.8.1",
+      "questionText": "Peristiwa perubahan frekuensi bunyi yang terdengar oleh pengamat akibat gerak relatif antara sumber bunyi dan pengamat dikenal sebagai fenomena ...",
+      "subchapterId": "sub-efek-doppler",
+      "subjectId": "sbj-fisika",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "status": "active",
+      "type": "pg",
+      "correctAnswer": "C",
+      "options": [
+        {
+          "text": "Difraksi Gelombang",
+          "id": "A"
+        },
+        {
+          "text": "Interferensi Konstruktif",
+          "id": "B"
+        },
+        {
+          "id": "C",
+          "text": "Efek Doppler"
+        },
+        {
+          "id": "D",
+          "text": "Polarisasi Bunyi"
+        },
+        {
+          "id": "E",
+          "text": "Dispersi Akustik"
+        }
+      ],
+      "chapterId": "ch-gelombang",
+      "points": 10
+    },
+    {
+      "id": "q-fis-07",
+      "cognitiveLevel": "MOTS",
+      "competencyId": "cmp-3.8.1",
+      "questionText": "Sebuah mobil ambulans bergerak dengan kelajuan 20 m/s membunyikan sirine berfrekuensi 640 Hz mendekati seorang siswa yang diam di halte. Jika cepat rambat bunyi di udara 340 m/s, frekuensi sirine yang didengar oleh siswa adalah ...",
+      "subjectId": "sbj-fisika",
+      "subchapterId": "sub-efek-doppler",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "status": "active",
+      "type": "pg",
+      "correctAnswer": "C",
+      "options": [
+        {
+          "id": "A",
+          "text": "600 Hz"
+        },
+        {
+          "text": "640 Hz",
+          "id": "B"
+        },
+        {
+          "text": "680 Hz",
+          "id": "C"
+        },
+        {
+          "id": "D",
+          "text": "720 Hz"
+        },
+        {
+          "id": "E",
+          "text": "760 Hz"
+        }
+      ],
+      "chapterId": "ch-gelombang",
+      "points": 10
+    },
+    {
+      "id": "q-fis-08",
+      "author": "Ahmad Fauzi, S.Pd.",
+      "cognitiveLevel": "HOTS",
+      "status": "active",
+      "chapterId": "ch-termo",
+      "subjectId": "sbj-fisika",
+      "type": "esai",
+      "competencyId": "cmp-3.6.2",
+      "points": 20,
+      "questionText": "Sebuah pabrik pembangkit listrik tenaga uap (PLTU) berencana meningkatkan efisiensi turbin uapnya dari 35% menjadi 45%. Jelaskan minimal 2 strategi termodinamika realistis berdasarkan konsep Siklus Rankine/Carnot beserta konsekuensi teknis dan keselamatan sistemnya.",
+      "subchapterId": "sub-siklus-carnot",
+      "correctAnswer": "Menaikkan temperatur uap masuk turbin (T1) dan menurunkan temperatur kondensor (T2) menggunakan pendingin air dan menara pendingin efisien, dengan memperhatikan batasan metalurgi turbin.",
+      "rubric": "Kriteria penilaian: 1. Penjelasan kenaikan suhu boiler / penurunan suhu kondensor (40%), 2. Analisis termal efisiensi (30%), 3. Konsekuensi teknis material tahan tekanan tinggi/korosi (30%)."
     }
   ],
   "exams": [
     {
       "id": "ex-fisika-xii-01",
-      "title": "Sumatif Akhir Semester: Fisika Terapan XII MIPA",
-      "subjectId": "sbj-fisika",
-      "academicYearId": "ay-2024-genap",
-      "semester": "Genap",
-      "targetClassIds": [
-        "cls-xii-mipa-1",
-        "cls-xii-mipa-2"
-      ],
       "scheduleStart": "2026-11-12T03:10:00.720Z",
-      "scheduleEnd": "2026-11-13T04:10:00.720Z",
-      "durationMinutes": 90,
-      "maxScore": 100,
-      "kktpScore": 75,
-      "selectedChapterIds": [
-        "ch-termo",
-        "ch-gelombang"
-      ],
       "selectedSubchapterIds": [
         "sub-hukum1-termo",
         "sub-siklus-carnot",
         "sub-entropi",
         "sub-efek-doppler"
       ],
+      "scheduleEnd": "2026-11-13T04:10:00.720Z",
+      "academicYearId": "ay-2024-genap",
+      "tokenUpdatedAt": "2026-11-12T04:10:00.720Z",
+      "subjectId": "sbj-fisika",
+      "isTokenActive": true,
+      "createdTeacherId": "usr-teacher-1",
+      "kktpScore": 75,
+      "selectedChapterIds": [
+        "ch-termo",
+        "ch-gelombang"
+      ],
+      "title": "Sumatif Akhir Semester: Fisika Terapan XII MIPA",
+      "tokenAutoRotate": true,
+      "durationMinutes": 90,
+      "tokenIntervalMinutes": 15,
+      "status": "active",
+      "token": "SMA7X9",
+      "antiCheating": {
+        "autoSubmitOnViolationLimit": false,
+        "maxToleranceViolations": 3,
+        "forceFullscreen": true,
+        "detectTabSwitch": true,
+        "blockCopyPaste": true,
+        "blockRightClick": true
+      },
+      "maxScore": 100,
       "selectedCompetencyIds": [
         "cmp-3.6.1",
         "cmp-3.6.2",
@@ -685,388 +1383,29 @@
         "cmp-3.8.1"
       ],
       "cognitiveTarget": {
-        "lotsCount": 2,
         "motsCount": 3,
+        "lotsCount": 2,
         "hotsCount": 2,
         "totalQuestions": 7
       },
-      "token": "SMA7X9",
-      "tokenAutoRotate": true,
-      "tokenIntervalMinutes": 15,
-      "tokenUpdatedAt": "2026-11-12T04:10:00.720Z",
-      "isTokenActive": true,
-      "antiCheating": {
-        "forceFullscreen": true,
-        "detectTabSwitch": true,
-        "blockRightClick": true,
-        "blockCopyPaste": true,
-        "maxToleranceViolations": 3,
-        "autoSubmitOnViolationLimit": false
-      },
-      "status": "active",
+      "semester": "Genap",
       "isPublishedResults": true,
-      "createdTeacherId": "usr-teacher-1",
+      "targetClassIds": [
+        "cls-xii-mipa-1",
+        "cls-xii-mipa-2"
+      ],
       "createdAt": "2026-11-12T04:10:00.720Z"
     }
   ],
-  "examPackages": {
-    "ex-fisika-xii-01_usr-student-2": {
-      "examId": "ex-fisika-xii-01",
-      "studentId": "usr-student-2",
-      "createdAt": "2026-11-12T04:10:00.722Z",
-      "totalQuestions": 7,
-      "questions": [
-        {
-          "number": 1,
-          "id": "q-fis-03",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-termo",
-          "subchapterId": "sub-siklus-carnot",
-          "competencyId": "cmp-3.6.2",
-          "cognitiveLevel": "HOTS",
-          "type": "pg_kompleks",
-          "questionText": "Sebuah mesin pendingin Carnot beroperasi di antara tandon suhu tinggi T₁ = 300 K dan tandon suhu rendah T₂ = 240 K. Manakah pernyataan berikut yang BENAR terkait mesin tersebut? (Pilih semua yang sesuai)",
-          "options": [
-            {
-              "id": "C",
-              "text": "Efisiensi termal mesin Carnot teoritis maksimum yang bekerja pada rentang suhu tersebut adalah 20%"
-            },
-            {
-              "id": "D",
-              "text": "Mesin pendingin tersebut melanggar Hukum II Termodinamika karena memindahkan kalor ke tandon suhu tinggi"
-            },
-            {
-              "id": "B",
-              "text": "Jika suhu tandon rendah diturunkan menjadi 200 K, nilai COP akan meningkat"
-            },
-            {
-              "id": "A",
-              "text": "Koefisien performansi (COP) mesin tersebut bernilai 4"
-            }
-          ],
-          "points": 15
-        },
-        {
-          "number": 2,
-          "id": "q-fis-07",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-gelombang",
-          "subchapterId": "sub-efek-doppler",
-          "competencyId": "cmp-3.8.1",
-          "cognitiveLevel": "MOTS",
-          "type": "pg",
-          "questionText": "Sebuah mobil ambulans bergerak dengan kelajuan 20 m/s membunyikan sirine berfrekuensi 640 Hz mendekati seorang siswa yang diam di halte. Jika cepat rambat bunyi di udara 340 m/s, frekuensi sirine yang didengar oleh siswa adalah ...",
-          "options": [
-            {
-              "id": "B",
-              "text": "640 Hz"
-            },
-            {
-              "id": "E",
-              "text": "760 Hz"
-            },
-            {
-              "id": "C",
-              "text": "680 Hz"
-            },
-            {
-              "id": "D",
-              "text": "720 Hz"
-            },
-            {
-              "id": "A",
-              "text": "600 Hz"
-            }
-          ],
-          "points": 10
-        },
-        {
-          "number": 3,
-          "id": "q-fis-01",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-termo",
-          "subchapterId": "sub-hukum1-termo",
-          "competencyId": "cmp-3.6.1",
-          "cognitiveLevel": "LOTS",
-          "type": "pg",
-          "questionText": "Pada proses termodinamika di mana volume sistem gas dijaga konstan (isokhorik), berapakah besar usaha (W) yang dilakukan oleh gas?",
-          "options": [
-            {
-              "id": "A",
-              "text": "W = P · ΔV"
-            },
-            {
-              "id": "B",
-              "text": "W = 0"
-            },
-            {
-              "id": "E",
-              "text": "W = Tak hingga"
-            },
-            {
-              "id": "D",
-              "text": "W = Q - ΔU"
-            },
-            {
-              "id": "C",
-              "text": "W = n · R · T · ln(V2/V1)"
-            }
-          ],
-          "points": 10
-        },
-        {
-          "number": 4,
-          "id": "q-fis-02",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-termo",
-          "subchapterId": "sub-hukum1-termo",
-          "competencyId": "cmp-3.6.1",
-          "cognitiveLevel": "MOTS",
-          "type": "pg",
-          "questionText": "Suatu gas ideal berada dalam ruang tertutup bertekanan tetap 2 × 10⁵ Pa. Jika gas dipanaskan sehingga memuai dari volume 1,5 m³ menjadi 2,5 m³, besar usaha yang dilakukan gas adalah ...",
-          "options": [
-            {
-              "id": "D",
-              "text": "4,0 × 10⁵ Joule"
-            },
-            {
-              "id": "A",
-              "text": "1,0 × 10⁵ Joule"
-            },
-            {
-              "id": "B",
-              "text": "2,0 × 10⁵ Joule"
-            },
-            {
-              "id": "E",
-              "text": "5,0 × 10⁵ Joule"
-            },
-            {
-              "id": "C",
-              "text": "3,0 × 10⁵ Joule"
-            }
-          ],
-          "points": 10
-        },
-        {
-          "number": 5,
-          "id": "q-fis-08",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-termo",
-          "subchapterId": "sub-siklus-carnot",
-          "competencyId": "cmp-3.6.2",
-          "cognitiveLevel": "HOTS",
-          "type": "esai",
-          "questionText": "Sebuah pabrik pembangkit listrik tenaga uap (PLTU) berencana meningkatkan efisiensi turbin uapnya dari 35% menjadi 45%. Jelaskan minimal 2 strategi termodinamika realistis berdasarkan konsep Siklus Rankine/Carnot beserta konsekuensi teknis dan keselamatan sistemnya.",
-          "points": 20
-        },
-        {
-          "number": 6,
-          "id": "q-fis-05",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-termo",
-          "subchapterId": "sub-siklus-carnot",
-          "competencyId": "cmp-3.6.2",
-          "cognitiveLevel": "MOTS",
-          "type": "pg",
-          "questionText": "Suatu mesin kalor Carnot menyerap kalor sebesar 800 J dari tandon suhu tinggi 600 K dan membuang sebagian kalor ke tandon suhu rendah 300 K. Berapakah usaha yang dihasilkan oleh mesin dalam satu siklus?",
-          "options": [
-            {
-              "id": "D",
-              "text": "500 Joule"
-            },
-            {
-              "id": "C",
-              "text": "400 Joule"
-            },
-            {
-              "id": "A",
-              "text": "200 Joule"
-            },
-            {
-              "id": "B",
-              "text": "300 Joule"
-            },
-            {
-              "id": "E",
-              "text": "600 Joule"
-            }
-          ],
-          "points": 10
-        },
-        {
-          "number": 7,
-          "id": "q-fis-06",
-          "subjectId": "sbj-fisika",
-          "chapterId": "ch-gelombang",
-          "subchapterId": "sub-efek-doppler",
-          "competencyId": "cmp-3.8.1",
-          "cognitiveLevel": "LOTS",
-          "type": "pg",
-          "questionText": "Peristiwa perubahan frekuensi bunyi yang terdengar oleh pengamat akibat gerak relatif antara sumber bunyi dan pengamat dikenal sebagai fenomena ...",
-          "options": [
-            {
-              "id": "D",
-              "text": "Polarisasi Bunyi"
-            },
-            {
-              "id": "A",
-              "text": "Difraksi Gelombang"
-            },
-            {
-              "id": "C",
-              "text": "Efek Doppler"
-            },
-            {
-              "id": "E",
-              "text": "Dispersi Akustik"
-            },
-            {
-              "id": "B",
-              "text": "Interferensi Konstruktif"
-            }
-          ],
-          "points": 10
-        }
-      ]
-    }
+  "examPackages": {},
+  "examSessions": {},
+  "examResults": {},
+  "settings": {
+    "schoolName": "SMAN 1 PRESTASI BANGSA",
+    "schoolLogoUrl": "",
+    "loginBackgroundUrl": "",
+    "appSubtitle": "CBT Portal · TP 2024/2025 Genap",
+    "academicYearText": "2024/2025 Genap"
   },
-  "examSessions": {
-    "ex-fisika-xii-01_usr-student-2": {
-      "id": "ex-fisika-xii-01_usr-student-2",
-      "examId": "ex-fisika-xii-01",
-      "studentId": "usr-student-2",
-      "studentName": "Siti Nur Aisyah",
-      "studentNis": "20241002",
-      "className": "XII MIPA 1",
-      "status": "completed",
-      "startedAt": "2026-11-12T03:10:00.723Z",
-      "completedAt": "2026-11-12T04:00:00.723Z",
-      "remainingSeconds": 0,
-      "currentQuestionIndex": 6,
-      "answers": {
-        "q-fis-01": "B",
-        "q-fis-02": "B",
-        "q-fis-03": [
-          "A",
-          "C"
-        ],
-        "q-fis-04": "true",
-        "q-fis-05": "C",
-        "q-fis-06": "C",
-        "q-fis-07": "A"
-      },
-      "violationCount": 0,
-      "violations": [],
-      "lastHeartbeat": "2026-11-12T04:10:00.723Z"
-    }
-  },
-  "examResults": {
-    "ex-fisika-xii-01_usr-student-2": {
-      "id": "res-usr-student-2",
-      "examId": "ex-fisika-xii-01",
-      "studentId": "usr-student-2",
-      "studentName": "Siti Nur Aisyah",
-      "studentNis": "20241002",
-      "className": "XII MIPA 1",
-      "completedAt": "2026-11-12T04:00:00.723Z",
-      "finalScore": 88,
-      "isPassed": true,
-      "kktpScore": 75,
-      "correctCount": 6,
-      "wrongCount": 1,
-      "emptyCount": 0,
-      "totalQuestions": 7,
-      "breakdownByCognitive": {
-        "LOTS": {
-          "total": 2,
-          "correct": 2
-        },
-        "MOTS": {
-          "total": 3,
-          "correct": 2
-        },
-        "HOTS": {
-          "total": 2,
-          "correct": 2
-        }
-      },
-      "questionDetails": [
-        {
-          "questionId": "q-fis-01",
-          "number": 1,
-          "cognitiveLevel": "LOTS",
-          "subchapterId": "sub-hukum1-termo",
-          "isCorrect": true,
-          "scoreEarned": 10,
-          "maxPoints": 10
-        },
-        {
-          "questionId": "q-fis-02",
-          "number": 2,
-          "cognitiveLevel": "MOTS",
-          "subchapterId": "sub-hukum1-termo",
-          "isCorrect": true,
-          "scoreEarned": 10,
-          "maxPoints": 10
-        },
-        {
-          "questionId": "q-fis-03",
-          "number": 3,
-          "cognitiveLevel": "HOTS",
-          "subchapterId": "sub-siklus-carnot",
-          "isCorrect": true,
-          "scoreEarned": 15,
-          "maxPoints": 15
-        },
-        {
-          "questionId": "q-fis-04",
-          "number": 4,
-          "cognitiveLevel": "HOTS",
-          "subchapterId": "sub-entropi",
-          "isCorrect": true,
-          "scoreEarned": 10,
-          "maxPoints": 10
-        },
-        {
-          "questionId": "q-fis-05",
-          "number": 5,
-          "cognitiveLevel": "MOTS",
-          "subchapterId": "sub-siklus-carnot",
-          "isCorrect": true,
-          "scoreEarned": 10,
-          "maxPoints": 10
-        },
-        {
-          "questionId": "q-fis-06",
-          "number": 6,
-          "cognitiveLevel": "LOTS",
-          "subchapterId": "sub-efek-doppler",
-          "isCorrect": true,
-          "scoreEarned": 10,
-          "maxPoints": 10
-        },
-        {
-          "questionId": "q-fis-07",
-          "number": 7,
-          "cognitiveLevel": "MOTS",
-          "subchapterId": "sub-efek-doppler",
-          "isCorrect": false,
-          "scoreEarned": 0,
-          "maxPoints": 10
-        }
-      ],
-      "violationsRecorded": []
-    }
-  },
-  "activityLogs": [
-    {
-      "id": "log-1",
-      "timestamp": "2026-11-12T03:40:00.720Z",
-      "actorName": "Ahmad Fauzi, S.Pd.",
-      "role": "teacher",
-      "action": "CREATE_EXAM",
-      "details": "Membuat Ujian Sumatif Fisika XII MIPA (Token: SMA7X9)"
-    }
-  ]
+  "activityLogs": []
 }

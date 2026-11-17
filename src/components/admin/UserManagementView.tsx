@@ -17,7 +17,10 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
+import { generateRandomPassword } from '../../lib/passwordUtils';
 
 export const UserManagementView: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -58,6 +61,8 @@ export const UserManagementView: React.FC = () => {
   // New User Form
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('siswa123');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const [newNis, setNewNis] = useState('');
@@ -145,6 +150,7 @@ export const UserManagementView: React.FC = () => {
     setEditNip(u.nip || '');
     setEditSubjectSpecialty(u.subjectSpecialty || '');
     setEditPassword('');
+    setShowEditPassword(false);
     setEditIsActive(u.isActive !== false);
     setShowEditModal(true);
   };
@@ -538,13 +544,37 @@ export const UserManagementView: React.FC = () => {
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Kata Sandi Awal</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                  required
-                />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full px-3 py-2 pr-8 border border-slate-300 rounded-lg font-mono"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                      title={showNewPassword ? 'Sembunyikan' : 'Tampilkan'}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPassword(generateRandomPassword(6));
+                      setShowNewPassword(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+                    title="Buat password acak"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Generate Password</span>
+                  </button>
+                </div>
               </div>
 
               {newRole === 'student' && (
@@ -611,13 +641,24 @@ export const UserManagementView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">
                   Masukkan Password Baru (Default: sma12345)
                 </label>
-                <input
-                  type="text"
-                  value={newPasswordInput}
-                  onChange={(e) => setNewPasswordInput(e.target.value)}
-                  placeholder="sma12345"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    placeholder="sma12345"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewPasswordInput(generateRandomPassword(6))}
+                    className="flex items-center gap-1 px-2.5 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+                    title="Buat password acak"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Generate Password</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -831,13 +872,37 @@ export const UserManagementView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">
                   Kata Sandi Baru (Opsional)
                 </label>
-                <input
-                  type="password"
-                  value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
-                  placeholder="Kosongkan jika tidak ingin mengubah password"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={showEditPassword ? 'text' : 'password'}
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="Kosongkan jika tidak ingin mengubah password"
+                      className="w-full px-3 py-2 pr-8 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEditPassword((v) => !v)}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                      title={showEditPassword ? 'Sembunyikan' : 'Tampilkan'}
+                    >
+                      {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditPassword(generateRandomPassword(6));
+                      setShowEditPassword(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors shrink-0 cursor-pointer"
+                    title="Buat password acak"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Generate Password</span>
+                  </button>
+                </div>
               </div>
 
               <div>

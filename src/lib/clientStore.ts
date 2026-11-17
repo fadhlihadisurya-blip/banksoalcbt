@@ -1,28 +1,39 @@
-import initialDb from '../../data/cbt_database.json';
 import { firestoreStore } from './firestoreStore';
-import {
-  User,
-  ClassGroup,
-  AcademicYear,
-  Subject,
-  Chapter,
-  Subchapter,
-  Competency,
-  Question,
-  Exam,
-  ExamSession,
-  ExamResultItem,
-  MonitoringPayload,
-  StudentExamInfo,
-} from '../types/cbt';
 
-const STORAGE_KEY = 'cbt_database_v1';
+const STORAGE_KEY = 'cbt_database_cache_v2';
+
+const EMPTY_DB = {
+  users: [],
+  academicYears: [
+    { id: 'ay-2024-genap', name: '2024/2025', semester: 'Genap', isActive: true },
+    { id: 'ay-2024-ganjil', name: '2024/2025', semester: 'Ganjil', isActive: false },
+  ],
+  classes: [],
+  subjects: [],
+  chapters: [],
+  subchapters: [],
+  competencies: [],
+  questions: [],
+  exams: [],
+  settings: {
+    schoolName: '',
+    schoolLogoUrl: '',
+    loginBackgroundUrl: '',
+    appSubtitle: '',
+    academicYearText: '2024/2025 Genap',
+  },
+  activityLogs: [],
+};
 
 function getStoredDb(): any {
   if (typeof window === 'undefined') {
-    return initialDb;
+    return JSON.parse(JSON.stringify(EMPTY_DB));
   }
   try {
+    // Clear legacy dummy cache if present
+    if (localStorage.getItem('cbt_database_v1')) {
+      localStorage.removeItem('cbt_database_v1');
+    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       return JSON.parse(raw);
@@ -30,11 +41,7 @@ function getStoredDb(): any {
   } catch (e) {
     console.error('Failed to read from localStorage:', e);
   }
-  const clone = JSON.parse(JSON.stringify(initialDb));
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clone));
-  } catch {}
-  return clone;
+  return JSON.parse(JSON.stringify(EMPTY_DB));
 }
 
 function saveStoredDb(db: any) {
@@ -50,6 +57,7 @@ export const clientStore = {
   handleRequest: async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
     const dbLocal = getStoredDb();
     const method = (options.method || 'GET').toUpperCase();
+    const [cleanPath, queryString] = endpoint.split('?');
     let body: any = {};
     if (options.body && typeof options.body === 'string') {
       try {
@@ -58,596 +66,308 @@ export const clientStore = {
     }
 
     // 1. Classes: /classes
-    if (endpoint === '/classes') {
+    if (cleanPath === '/classes') {
       if (method === 'GET') {
-        try {
-          const fsRes = await firestoreStore.getClasses();
-          if (fsRes && fsRes.classes && fsRes.classes.length > 0) {
-            dbLocal.classes = fsRes.classes;
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local cache for /classes:', e);
+        const fsRes = await firestoreStore.getClasses();
+        if (fsRes) {
+          dbLocal.classes = fsRes.classes;
+          saveStoredDb(dbLocal);
+          return fsRes as unknown as T;
         }
-        return { classes: dbLocal.classes || [], academicYears: dbLocal.academicYears || [] } as T;
+        return { classes: [], academicYears: EMPTY_DB.academicYears } as T;
       }
       if (method === 'POST') {
-        let newClass: any = null;
-        try {
-          const fsRes = await firestoreStore.createClass(body);
-          if (fsRes && fsRes.class) newClass = fsRes.class;
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local create for /classes:', e);
+        const fsRes = await firestoreStore.createClass(body);
+        if (fsRes && fsRes.class) {
+          dbLocal.classes = dbLocal.classes || [];
+          dbLocal.classes.push(fsRes.class);
+          saveStoredDb(dbLocal);
+          return fsRes as unknown as T;
         }
-
-        if (!newClass) {
-          const { gradeLevel, name, academicYearId, homeroomTeacher } = body;
-          newClass = {
-            id: `cls-${Date.now()}`,
-            gradeLevel: gradeLevel || 'XII',
-            name: name || 'Kelas Baru',
-            academicYearId: academicYearId || dbLocal.academicYears?.[0]?.id || 'ay-2024-genap',
-            homeroomTeacher: homeroomTeacher || '',
-          };
-        }
-
-        dbLocal.classes = dbLocal.classes || [];
-        dbLocal.classes.push(newClass);
-        saveStoredDb(dbLocal);
-        return { success: true, class: newClass } as T;
       }
     }
 
     // Classes by ID: /classes/:id
-    if (endpoint.startsWith('/classes/')) {
-      const classId = endpoint.replace('/classes/', '');
-
+    if (cleanPath.startsWith('/classes/')) {
+      const classId = cleanPath.replace('/classes/', '');
       if (method === 'PUT') {
-        try {
-          const fsRes = await firestoreStore.updateClass(classId, body);
-          if (fsRes) {
-            const clsIndex = (dbLocal.classes || []).findIndex((c: any) => c.id === classId);
-            if (clsIndex !== -1) {
-              dbLocal.classes[clsIndex] = { ...dbLocal.classes[clsIndex], ...body };
-              saveStoredDb(dbLocal);
-            }
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local update for /classes:', e);
-        }
-
-        const clsIndex = (dbLocal.classes || []).findIndex((c: any) => c.id === classId);
-        if (clsIndex === -1) throw new Error('Kelas tidak ditemukan.');
-        const cls = dbLocal.classes[clsIndex];
-        if (body.name !== undefined) cls.name = body.name.trim();
-        if (body.gradeLevel !== undefined) cls.gradeLevel = body.gradeLevel;
-        if (body.homeroomTeacher !== undefined) cls.homeroomTeacher = body.homeroomTeacher.trim();
-        if (body.academicYearId !== undefined) cls.academicYearId = body.academicYearId;
-        saveStoredDb(dbLocal);
-        return { success: true, class: cls, message: 'Data kelas berhasil diperbarui.' } as T;
+        const fsRes = await firestoreStore.updateClass(classId, body);
+        if (fsRes) return fsRes as unknown as T;
       }
-
       if (method === 'DELETE') {
-        try {
-          await firestoreStore.deleteClass(classId);
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local delete for /classes:', e);
-        }
-
-        const clsIndex = (dbLocal.classes || []).findIndex((c: any) => c.id === classId);
-        if (clsIndex !== -1) {
-          dbLocal.users = (dbLocal.users || []).map((u: any) => {
-            if (u.classId === classId) return { ...u, classId: '' };
-            return u;
-          });
-          dbLocal.classes.splice(clsIndex, 1);
-          saveStoredDb(dbLocal);
-        }
-        return { success: true, message: 'Kelas berhasil dihapus.' } as T;
+        const fsRes = await firestoreStore.deleteClass(classId);
+        if (fsRes) return fsRes as unknown as T;
       }
     }
 
     // 2. Admin Users: /admin/users
-    if (endpoint === '/admin/users') {
+    if (cleanPath === '/admin/users') {
       if (method === 'GET') {
-        try {
-          const fsRes = await firestoreStore.getUsers();
-          if (fsRes && fsRes.users && fsRes.users.length > 0) {
-            dbLocal.users = fsRes.users;
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local cache for /admin/users:', e);
+        const fsRes = await firestoreStore.getUsers();
+        if (fsRes) {
+          dbLocal.users = fsRes.users;
+          saveStoredDb(dbLocal);
+          return fsRes as unknown as T;
         }
-        const safeUsers = (dbLocal.users || []).map((u: any) => {
-          const copy = { ...u };
-          delete copy.passwordHash;
-          return copy;
-        });
-        return { users: safeUsers } as T;
+        return { users: [] } as T;
       }
-
       if (method === 'POST') {
-        let newUser: any = null;
-        try {
-          const fsRes = await firestoreStore.createUser(body);
-          if (fsRes && fsRes.user) newUser = fsRes.user;
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local create for /admin/users:', e);
-        }
-
-        if (!newUser) {
-          const { username, name, role, email, nis, classId, nip, subjectSpecialty } = body;
-          newUser = {
-            id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            username,
-            name,
-            role,
-            email: email || '',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-          };
-          if (role === 'student') {
-            newUser.nis = nis || username;
-            newUser.classId = classId || '';
-          } else if (role === 'teacher') {
-            newUser.nip = nip || '';
-            newUser.subjectSpecialty = subjectSpecialty || '';
-          }
-        }
-
-        dbLocal.users = dbLocal.users || [];
-        dbLocal.users.push(newUser);
-        saveStoredDb(dbLocal);
-        return { success: true, user: newUser } as T;
+        const fsRes = await firestoreStore.createUser(body);
+        if (fsRes) return fsRes as unknown as T;
       }
     }
 
     // Admin Users by ID: /admin/users/:id
-    if (endpoint.startsWith('/admin/users/')) {
-      const rest = endpoint.replace('/admin/users/', '');
-
+    if (cleanPath.startsWith('/admin/users/')) {
+      const rest = cleanPath.replace('/admin/users/', '');
       if (rest === 'reset-password' && method === 'POST') {
-        saveStoredDb(dbLocal);
+        const { userId, newPassword } = body;
+        if (userId) {
+          await firestoreStore.updateUser(userId, {
+            password: newPassword || 'siswa123',
+          });
+        }
         return { success: true, message: 'Password berhasil direset.' } as T;
       }
-
       if (rest === 'toggle-status' && method === 'POST') {
         const { userId } = body;
-        const user = (dbLocal.users || []).find((u: any) => u.id === userId);
-        if (user) {
-          user.isActive = !user.isActive;
-          try {
-            await firestoreStore.updateUser(userId, { isActive: user.isActive });
-          } catch (e) {
-            console.warn('[Firestore] Toggle status sync error:', e);
-          }
-          saveStoredDb(dbLocal);
-          return { success: true, isActive: user.isActive } as T;
-        }
-        throw new Error('User tidak ditemukan.');
+        const fsUsers = await firestoreStore.getUsers();
+        const user = (fsUsers?.users || []).find((u: any) => u.id === userId);
+        if (!user) throw new Error('User tidak ditemukan.');
+        const nextActive = !user.isActive;
+        await firestoreStore.updateUser(userId, { isActive: nextActive });
+        return { success: true, isActive: nextActive } as T;
       }
 
       const userId = rest;
-
       if (method === 'PUT') {
-        try {
-          const fsRes = await firestoreStore.updateUser(userId, body);
-          if (fsRes) {
-            const userIndex = (dbLocal.users || []).findIndex((u: any) => u.id === userId);
-            if (userIndex !== -1) {
-              dbLocal.users[userIndex] = { ...dbLocal.users[userIndex], ...body };
-              saveStoredDb(dbLocal);
-            }
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local update for user:', e);
-        }
-
-        const userIndex = (dbLocal.users || []).findIndex((u: any) => u.id === userId);
-        if (userIndex === -1) throw new Error('User tidak ditemukan.');
-        const user = dbLocal.users[userIndex];
-        if (body.name !== undefined) user.name = body.name.trim();
-        if (body.username !== undefined) user.username = body.username.trim();
-        if (body.role !== undefined) user.role = body.role;
-        if (body.email !== undefined) user.email = body.email.trim();
-        if (body.isActive !== undefined) user.isActive = Boolean(body.isActive);
-        if (body.nis !== undefined) user.nis = body.nis;
-        if (body.classId !== undefined) user.classId = body.classId;
-        if (body.nip !== undefined) user.nip = body.nip;
-        if (body.subjectSpecialty !== undefined) user.subjectSpecialty = body.subjectSpecialty;
-        saveStoredDb(dbLocal);
-        const safe = { ...user };
-        delete safe.passwordHash;
-        return { success: true, user: safe, message: 'Data akun berhasil diperbarui.' } as T;
+        const fsRes = await firestoreStore.updateUser(userId, body);
+        if (fsRes) return fsRes as unknown as T;
       }
-
       if (method === 'DELETE') {
-        try {
-          await firestoreStore.deleteUser(userId);
-        } catch (e) {
-          console.warn('[Firestore] Falling back to local delete for user:', e);
-        }
-
-        const userIndex = (dbLocal.users || []).findIndex((u: any) => u.id === userId);
-        if (userIndex !== -1) {
-          const user = dbLocal.users[userIndex];
-          if (user.role === 'admin') {
-            throw new Error('Akun Administrator tidak dapat dihapus demi keamanan sistem.');
-          }
-          dbLocal.users.splice(userIndex, 1);
-          saveStoredDb(dbLocal);
-        }
-        return { success: true, message: 'Akun berhasil dihapus.' } as T;
+        const fsRes = await firestoreStore.deleteUser(userId);
+        if (fsRes) return fsRes as unknown as T;
       }
     }
 
-    // Bulk Import Students: /admin/students/bulk-import
-    if (endpoint === '/admin/students/bulk-import' && method === 'POST') {
+    // Bulk Import Students
+    if (cleanPath === '/admin/students/bulk-import' && method === 'POST') {
       const { students } = body;
-      try {
-        const fsRes = await firestoreStore.bulkImportStudents(students || []);
-        if (fsRes) {
-          await firestoreStore.getUsers().then((res) => {
-            if (res && res.users) {
-              dbLocal.users = res.users;
-              saveStoredDb(dbLocal);
-            }
-          });
-          return fsRes as unknown as T;
-        }
-      } catch (e) {
-        console.warn('[Firestore] Bulk import fallback:', e);
-      }
+      const fsRes = await firestoreStore.bulkImportStudents(students || []);
+      if (fsRes) return fsRes as unknown as T;
+    }
 
-      let count = 0;
-      dbLocal.users = dbLocal.users || [];
-      for (const s of (students || [])) {
-        const username = s.username || s.nis;
-        if (!username || dbLocal.users.some((u: any) => u.username.toLowerCase() === username.toLowerCase())) {
-          continue;
-        }
-        dbLocal.users.push({
-          id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          username,
-          name: s.name,
-          role: 'student',
-          nis: s.nis || username,
-          classId: s.classId || '',
-          email: s.email || '',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        });
-        count++;
-      }
-      saveStoredDb(dbLocal);
-      return { success: true, count, message: `Berhasil mengimpor ${count} akun siswa.` } as T;
+    // Bulk Generate Student Passwords
+    if (cleanPath === '/admin/students/generate-passwords' && method === 'POST') {
+      const { classId } = body || {};
+      const fsRes = await firestoreStore.bulkGenerateStudentPasswords(classId);
+      if (fsRes) return fsRes as unknown as T;
     }
 
     // 3. Auth Login: /auth/login
-    if (endpoint === '/auth/login' && method === 'POST') {
-      const { username } = body;
-      const cleanUser = (username || '').toLowerCase();
-      try {
-        const fsUsers = await firestoreStore.getUsers();
-        if (fsUsers && fsUsers.users && fsUsers.users.length > 0) {
-          let match = fsUsers.users.find((u: any) => u.username.toLowerCase() === cleanUser);
-          if (!match) {
-            if (cleanUser === 'admin') match = fsUsers.users.find((u: any) => u.role === 'admin');
-            else if (cleanUser === 'guru' || cleanUser === 'teacher') match = fsUsers.users.find((u: any) => u.role === 'teacher');
-            else if (cleanUser.startsWith('siswa') || cleanUser === 'student') match = fsUsers.users.find((u: any) => u.role === 'student');
+    if (cleanPath === '/auth/login' && method === 'POST') {
+      const { username, password, portal } = body;
+      const cleanUser = (username || '').trim().toLowerCase();
+      const cleanPass = String(password || '').trim();
+      const fsUsers = await firestoreStore.getUsers();
+      const usersList = fsUsers?.users || [];
+
+      const matching = usersList.filter((u: any) => {
+        const uName = (u.username || '').toLowerCase();
+        const uNis = (u.nis || '').toLowerCase();
+        const uNip = (u.nip || '').toLowerCase();
+        const uEmail = (u.email || '').toLowerCase();
+        return (
+          uName === cleanUser ||
+          (u.role === 'student' && uNis && uNis === cleanUser) ||
+          ((u.role === 'admin' || u.role === 'teacher') &&
+            ((uNip && uNip === cleanUser) || (uEmail && uEmail === cleanUser)))
+        );
+      });
+
+      const verifyPass = (u: any) => {
+        if (u.plainPassword && String(u.plainPassword).trim() === cleanPass) return true;
+        if (u.role === 'admin' && (cleanPass === 'admin123' || cleanPass === 'admin') && !u.passwordCustom) return true;
+        if (u.role === 'teacher' && cleanPass === 'guru123' && !u.passwordCustom) return true;
+        if (u.role === 'student' && cleanPass === 'siswa123' && !u.passwordCustom) return true;
+        return false;
+      };
+
+      const match = matching.find((u: any) => {
+        if (portal === 'student' && u.role !== 'student') return false;
+        if (portal === 'staff' && u.role === 'student') return false;
+        return verifyPass(u);
+      });
+
+      if (!match) {
+        const wrongPortal = matching.find((u: any) => verifyPass(u));
+        if (wrongPortal) {
+          if (portal === 'student' && wrongPortal.role !== 'student') {
+            throw new Error('Akun Admin atau Guru tidak dapat masuk melalui halaman login siswa.');
           }
-          if (match) {
-            return { success: true, user: match } as T;
+          if (portal === 'staff' && wrongPortal.role === 'student') {
+            throw new Error('Akun siswa tidak dapat masuk melalui halaman login Admin / Guru.');
           }
         }
-      } catch (e) {
-        console.warn('[Firestore] Login lookup fallback:', e);
+        throw new Error('Username atau password salah.');
       }
 
-      let user = (dbLocal.users || []).find((u: any) => u.username.toLowerCase() === cleanUser);
-      if (!user) {
-        if (cleanUser === 'admin') user = (dbLocal.users || []).find((u: any) => u.role === 'admin');
-        else if (cleanUser === 'guru' || cleanUser === 'teacher') user = (dbLocal.users || []).find((u: any) => u.role === 'teacher');
-        else if (cleanUser.startsWith('siswa') || cleanUser === 'student') user = (dbLocal.users || []).find((u: any) => u.role === 'student');
+      if (match.isActive === false) {
+        throw new Error('Akun Anda dinonaktifkan oleh Administrator. Hubungi pihak sekolah.');
       }
 
-      if (user) {
-        user.lastLogin = new Date().toISOString();
-        saveStoredDb(dbLocal);
-        const safe = { ...user };
-        delete safe.passwordHash;
-        return { success: true, user: safe } as T;
-      }
-
-      // Default mock profile fallback for demo role switches
-      if (cleanUser === 'admin') {
-        return {
-          success: true,
-          user: { id: 'usr-admin-1', username: 'admin', name: 'Drs. Hendro Wibowo, M.Pd.', role: 'admin', email: 'admin@sman1prestasi.sch.id', isActive: true },
-        } as unknown as T;
-      }
-      if (cleanUser === 'guru' || cleanUser === 'teacher') {
-        return {
-          success: true,
-          user: { id: 'usr-teacher-1', username: 'guru', name: 'Ahmad Fauzi, S.Pd., M.Si.', role: 'teacher', email: 'ahmad.fauzi@sman1prestasi.sch.id', isActive: true },
-        } as unknown as T;
-      }
-      if (cleanUser.startsWith('siswa') || cleanUser === 'student') {
-        return {
-          success: true,
-          user: { id: 'usr-student-1', username: 'siswa', name: 'Siswa Demo CBT', role: 'student', nis: '20241001', classId: 'cls-xii-mipa-1', isActive: true },
-        } as unknown as T;
-      }
-
-      throw new Error('Username atau password salah.');
+      return { success: true, user: match } as T;
     }
 
     // 4. Questions: /questions
-    if (endpoint.startsWith('/questions')) {
+    if (cleanPath === '/questions' || cleanPath.startsWith('/questions/')) {
       if (method === 'GET') {
-        try {
-          const fsRes = await firestoreStore.getQuestions();
-          if (fsRes && fsRes.questions && fsRes.questions.length > 0) {
-            dbLocal.questions = fsRes.questions;
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
+        const fsRes = await firestoreStore.getQuestions();
+        let list = fsRes?.questions || [];
+        if (queryString) {
+          const params = new URLSearchParams(queryString);
+          const subjectId = params.get('subjectId');
+          const chapterId = params.get('chapterId');
+          const subchapterId = params.get('subchapterId');
+          const competencyId = params.get('competencyId');
+          const cognitiveLevel = params.get('cognitiveLevel');
+          const type = params.get('type');
+          const status = params.get('status');
+          const search = params.get('search');
+          if (subjectId) list = list.filter((q: any) => q.subjectId === subjectId);
+          if (chapterId) list = list.filter((q: any) => q.chapterId === chapterId);
+          if (subchapterId) list = list.filter((q: any) => q.subchapterId === subchapterId);
+          if (competencyId) list = list.filter((q: any) => q.competencyId === competencyId);
+          if (cognitiveLevel) list = list.filter((q: any) => q.cognitiveLevel === cognitiveLevel);
+          if (type) list = list.filter((q: any) => q.type === type);
+          if (status) list = list.filter((q: any) => q.status === status);
+          if (search) {
+            const s = search.toLowerCase();
+            list = list.filter(
+              (q: any) =>
+                (q.questionText || '').toLowerCase().includes(s) ||
+                (q.code || '').toLowerCase().includes(s)
+            );
           }
-        } catch (e) {
-          console.warn('[Firestore] Questions fetch fallback:', e);
         }
-        return { questions: dbLocal.questions || [] } as T;
+        return { questions: list } as T;
       }
-
-      if (method === 'POST') {
-        try {
-          const fsRes = await firestoreStore.createQuestion(body);
-          if (fsRes && fsRes.question) {
-            dbLocal.questions = dbLocal.questions || [];
-            dbLocal.questions.push(fsRes.question);
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Question creation fallback:', e);
-        }
-
-        const newQ = {
-          ...body,
-          id: `q-${Date.now()}`,
-          status: body.status || 'Aktif',
-          createdAt: new Date().toISOString(),
-        };
-        dbLocal.questions = dbLocal.questions || [];
-        dbLocal.questions.push(newQ);
-        saveStoredDb(dbLocal);
-        return { success: true, question: newQ } as T;
+      if (method === 'POST' && cleanPath === '/questions') {
+        const fsRes = await firestoreStore.createQuestion(body);
+        if (fsRes) return fsRes as unknown as T;
       }
-
+      if (method === 'POST' && cleanPath === '/questions/bulk-import') {
+        const fsRes = await firestoreStore.bulkCreateQuestions(body.questions || []);
+        if (fsRes) return fsRes as unknown as T;
+      }
       if (method === 'PUT') {
-        const qId = endpoint.replace('/questions/', '');
-        try {
-          const fsRes = await firestoreStore.updateQuestion(qId, body);
-          if (fsRes) {
-            const qIndex = (dbLocal.questions || []).findIndex((q: any) => q.id === qId);
-            if (qIndex !== -1) dbLocal.questions[qIndex] = { ...dbLocal.questions[qIndex], ...body };
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Question update fallback:', e);
-        }
-
-        const qIndex = (dbLocal.questions || []).findIndex((q: any) => q.id === qId);
-        if (qIndex !== -1) {
-          dbLocal.questions[qIndex] = { ...dbLocal.questions[qIndex], ...body };
-          saveStoredDb(dbLocal);
-          return { success: true, question: dbLocal.questions[qIndex] } as T;
-        }
+        const qId = cleanPath.replace('/questions/', '');
+        const fsRes = await firestoreStore.updateQuestion(qId, body);
+        if (fsRes) return fsRes as unknown as T;
       }
-
       if (method === 'DELETE') {
-        const qId = endpoint.replace('/questions/', '');
-        try {
-          await firestoreStore.deleteQuestion(qId);
-        } catch (e) {
-          console.warn('[Firestore] Question delete fallback:', e);
-        }
-        dbLocal.questions = (dbLocal.questions || []).filter((q: any) => q.id !== qId);
-        saveStoredDb(dbLocal);
-        return { success: true } as T;
+        const qId = cleanPath.replace('/questions/', '');
+        const fsRes = await firestoreStore.deleteQuestion(qId);
+        if (fsRes) return fsRes as unknown as T;
       }
     }
 
     // 5. Taxonomy: /taxonomy
-    if (endpoint.startsWith('/taxonomy')) {
-      if (method === 'GET') {
-        try {
-          const fsRes = await firestoreStore.getTaxonomy();
-          if (fsRes && fsRes.subjects && fsRes.subjects.length > 0) {
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Taxonomy fetch fallback:', e);
-        }
-        return {
-          subjects: dbLocal.subjects || [],
-          chapters: dbLocal.chapters || [],
-          subchapters: dbLocal.subchapters || [],
-          competencies: dbLocal.competencies || [],
-        } as T;
+    if (cleanPath === '/taxonomy' && method === 'GET') {
+      const fsRes = await firestoreStore.getTaxonomy();
+      if (fsRes) return fsRes as unknown as T;
+      return { subjects: [], chapters: [], subchapters: [], competencies: [] } as T;
+    }
+
+    if (cleanPath.startsWith('/taxonomy/')) {
+      const parts = cleanPath.split('/');
+      const entity = parts[2];
+      const id = parts[3];
+
+      if (entity === 'subject') {
+        if (method === 'POST') return (await firestoreStore.createSubject(body)) as unknown as T;
+        if (method === 'PUT' && id) return (await firestoreStore.updateSubject(id, body)) as unknown as T;
+        if (method === 'DELETE' && id) return (await firestoreStore.deleteSubject(id)) as unknown as T;
+      }
+      if (entity === 'chapter') {
+        if (method === 'POST') return (await firestoreStore.createChapter(body)) as unknown as T;
+        if (method === 'PUT' && id) return (await firestoreStore.updateChapter(id, body)) as unknown as T;
+        if (method === 'DELETE' && id) return (await firestoreStore.deleteChapter(id)) as unknown as T;
+      }
+      if (entity === 'subchapter') {
+        if (method === 'POST') return (await firestoreStore.createSubchapter(body)) as unknown as T;
+        if (method === 'PUT' && id) return (await firestoreStore.updateSubchapter(id, body)) as unknown as T;
+        if (method === 'DELETE' && id) return (await firestoreStore.deleteSubchapter(id)) as unknown as T;
+      }
+      if (entity === 'competency') {
+        if (method === 'POST') return (await firestoreStore.createCompetency(body)) as unknown as T;
+        if (method === 'PUT' && id) return (await firestoreStore.updateCompetency(id, body)) as unknown as T;
+        if (method === 'DELETE' && id) return (await firestoreStore.deleteCompetency(id)) as unknown as T;
       }
     }
 
     // 6. Exams: /exams
-    if (endpoint === '/exams') {
-      if (method === 'GET') {
-        try {
-          const fsRes = await firestoreStore.getExams();
-          if (fsRes && fsRes.exams && fsRes.exams.length > 0) {
-            dbLocal.exams = fsRes.exams;
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Exams fetch fallback:', e);
-        }
-        return { exams: dbLocal.exams || [] } as T;
-      }
+    if (cleanPath === '/exams/validate-availability' && method === 'POST') {
+      const fsRes = await firestoreStore.validateExamAvailability(body || {});
+      if (fsRes) return fsRes as unknown as T;
+    }
 
+    if (cleanPath === '/exams') {
+      if (method === 'GET') {
+        const fsRes = await firestoreStore.getExams();
+        return (fsRes || { exams: [] }) as unknown as T;
+      }
       if (method === 'POST') {
-        try {
-          const fsRes = await firestoreStore.createExam(body);
-          if (fsRes && fsRes.exam) {
-            dbLocal.exams = dbLocal.exams || [];
-            dbLocal.exams.push(fsRes.exam);
-            saveStoredDb(dbLocal);
-            return fsRes as unknown as T;
-          }
-        } catch (e) {
-          console.warn('[Firestore] Exam create fallback:', e);
-        }
+        const fsRes = await firestoreStore.createExam(body);
+        if (fsRes) return fsRes as unknown as T;
       }
     }
 
-    // Settings: /settings
-    if (endpoint === '/settings') {
-      if (!dbLocal.settings) {
-        dbLocal.settings = {
-          schoolName: 'SMAN 1 PRESTASI BANGSA',
-          schoolLogoUrl: '',
-          loginBackgroundUrl: '',
-          appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
-          academicYearText: '2024/2025 Genap',
-        };
-      }
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/results') && method === 'GET') {
+      const examId = cleanPath.replace('/exams/', '').replace('/results', '');
+      const fsRes = await firestoreStore.getExamResults(examId);
+      if (fsRes) return fsRes as unknown as T;
+    }
 
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/monitoring') && method === 'GET') {
+      const examId = cleanPath.replace('/exams/', '').replace('/monitoring', '');
+      const fsRes = await firestoreStore.getMonitoringData(examId);
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/toggle-live-score') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/toggle-live-score', '');
+      const fsRes = await firestoreStore.toggleLiveScore(examId, body?.showLiveScore);
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/manage-student') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/manage-student', '');
+      const fsRes = await firestoreStore.manageStudentSession(
+        examId,
+        body?.studentId,
+        body?.action,
+        body?.additionalMinutes
+      );
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    // 7. Settings: /settings
+    if (cleanPath === '/settings') {
       if (method === 'GET') {
-        return { settings: dbLocal.settings } as T;
+        const fsRes = await firestoreStore.getSettings();
+        return (fsRes || { settings: EMPTY_DB.settings }) as unknown as T;
       }
       if (method === 'PUT') {
-        const { schoolName, schoolLogoUrl, loginBackgroundUrl, appSubtitle, academicYearText } = body;
-        if (schoolName !== undefined) dbLocal.settings.schoolName = schoolName.trim();
-        if (schoolLogoUrl !== undefined) dbLocal.settings.schoolLogoUrl = schoolLogoUrl.trim();
-        if (loginBackgroundUrl !== undefined) dbLocal.settings.loginBackgroundUrl = loginBackgroundUrl.trim();
-        if (appSubtitle !== undefined) dbLocal.settings.appSubtitle = appSubtitle.trim();
-        if (academicYearText !== undefined) dbLocal.settings.academicYearText = academicYearText.trim();
-        saveStoredDb(dbLocal);
-        return { success: true, settings: dbLocal.settings, message: 'Pengaturan berhasil diperbarui.' } as T;
+        const fsRes = await firestoreStore.updateSettings(body);
+        if (fsRes) return fsRes as unknown as T;
       }
     }
 
-    // Taxonomy Mutations Fallback
-    if (endpoint.startsWith('/taxonomy/')) {
-      const parts = endpoint.split('/');
-      const entity = parts[2]; // subject | chapter | subchapter | competency
-      const id = parts[3];
-
-      if (entity === 'subject') {
-        if (method === 'POST') {
-          const item = { id: `sbj-${Date.now()}`, name: (body.name || '').trim(), code: (body.code || '').trim() };
-          dbLocal.subjects = dbLocal.subjects || [];
-          dbLocal.subjects.push(item);
-          saveStoredDb(dbLocal);
-          return { success: true, subject: item } as T;
-        }
-        if (method === 'PUT' && id) {
-          const item = (dbLocal.subjects || []).find((s: any) => s.id === id);
-          if (item) {
-            if (body.name !== undefined) item.name = body.name.trim();
-            if (body.code !== undefined) item.code = body.code.trim();
-            saveStoredDb(dbLocal);
-          }
-          return { success: true, subject: item, message: 'Berhasil diperbarui' } as T;
-        }
-        if (method === 'DELETE' && id) {
-          dbLocal.subjects = (dbLocal.subjects || []).filter((s: any) => s.id !== id);
-          saveStoredDb(dbLocal);
-          return { success: true, message: 'Berhasil dihapus' } as T;
-        }
-      }
-
-      if (entity === 'chapter') {
-        if (method === 'POST') {
-          const item = { id: `ch-${Date.now()}`, subjectId: body.subjectId, name: (body.name || '').trim() };
-          dbLocal.chapters = dbLocal.chapters || [];
-          dbLocal.chapters.push(item);
-          saveStoredDb(dbLocal);
-          return { success: true, chapter: item } as T;
-        }
-        if (method === 'PUT' && id) {
-          const item = (dbLocal.chapters || []).find((c: any) => c.id === id);
-          if (item) {
-            if (body.name !== undefined) item.name = body.name.trim();
-            if (body.subjectId !== undefined) item.subjectId = body.subjectId;
-            saveStoredDb(dbLocal);
-          }
-          return { success: true, chapter: item, message: 'Berhasil diperbarui' } as T;
-        }
-        if (method === 'DELETE' && id) {
-          dbLocal.chapters = (dbLocal.chapters || []).filter((c: any) => c.id !== id);
-          saveStoredDb(dbLocal);
-          return { success: true, message: 'Berhasil dihapus' } as T;
-        }
-      }
-
-      if (entity === 'subchapter') {
-        if (method === 'POST') {
-          const item = { id: `sub-${Date.now()}`, chapterId: body.chapterId, name: (body.name || '').trim() };
-          dbLocal.subchapters = dbLocal.subchapters || [];
-          dbLocal.subchapters.push(item);
-          saveStoredDb(dbLocal);
-          return { success: true, subchapter: item } as T;
-        }
-        if (method === 'PUT' && id) {
-          const item = (dbLocal.subchapters || []).find((sc: any) => sc.id === id);
-          if (item) {
-            if (body.name !== undefined) item.name = body.name.trim();
-            if (body.chapterId !== undefined) item.chapterId = body.chapterId;
-            saveStoredDb(dbLocal);
-          }
-          return { success: true, subchapter: item, message: 'Berhasil diperbarui' } as T;
-        }
-        if (method === 'DELETE' && id) {
-          dbLocal.subchapters = (dbLocal.subchapters || []).filter((sc: any) => sc.id !== id);
-          saveStoredDb(dbLocal);
-          return { success: true, message: 'Berhasil dihapus' } as T;
-        }
-      }
-
-      if (entity === 'competency') {
-        if (method === 'POST') {
-          const item = {
-            id: `cmp-${Date.now()}`,
-            subchapterId: body.subchapterId,
-            code: (body.code || '').trim(),
-            description: (body.description || '').trim(),
-          };
-          dbLocal.competencies = dbLocal.competencies || [];
-          dbLocal.competencies.push(item);
-          saveStoredDb(dbLocal);
-          return { success: true, competency: item } as T;
-        }
-        if (method === 'PUT' && id) {
-          const item = (dbLocal.competencies || []).find((cmp: any) => cmp.id === id);
-          if (item) {
-            if (body.code !== undefined) item.code = body.code.trim();
-            if (body.description !== undefined) item.description = body.description.trim();
-            if (body.subchapterId !== undefined) item.subchapterId = body.subchapterId;
-            saveStoredDb(dbLocal);
-          }
-          return { success: true, competency: item, message: 'Berhasil diperbarui' } as T;
-        }
-        if (method === 'DELETE' && id) {
-          dbLocal.competencies = (dbLocal.competencies || []).filter((cmp: any) => cmp.id !== id);
-          saveStoredDb(dbLocal);
-          return { success: true, message: 'Berhasil dihapus' } as T;
-        }
-      }
+    // 8. Activity Logs: /activity-logs
+    if (cleanPath === '/activity-logs' && method === 'GET') {
+      const fsRes = await firestoreStore.getActivityLogs();
+      return (fsRes || { logs: [] }) as unknown as T;
     }
 
     return {} as T;

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useSettings } from '../../context/SettingsContext';
 import { Exam, ExamResultItem } from '../../types/cbt';
 import {
   Award,
@@ -24,6 +25,7 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
   initialExamId,
   onOpenAnalytics,
 }) => {
+  const { settings } = useSettings();
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string>(initialExamId || '');
   const [resultsData, setResultsData] = useState<{
@@ -223,7 +225,7 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
 
       {/* Printable Report Header */}
       <div className="hidden print-only mb-6 border-b pb-4 text-center">
-        <h1 className="text-xl font-bold uppercase">SMAN 1 PRESTASI BANGSA</h1>
+        <h1 className="text-xl font-bold uppercase">{settings.schoolName || 'PORTAL CBT SEKOLAH'}</h1>
         <p className="text-xs text-gray-600">Laporan Hasil Asesmen Ujian Berbasis Komputer (CBT)</p>
         <p className="text-sm font-semibold mt-1">{resultsData?.exam.title}</p>
       </div>

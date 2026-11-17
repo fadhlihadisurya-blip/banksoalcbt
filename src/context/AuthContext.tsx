@@ -12,7 +12,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, portal?: 'student' | 'staff') => Promise<void>;
   loginGoogle: () => Promise<void>;
   loginAdminEmail: (email: string, pass: string) => Promise<void>;
   logout: () => void;
@@ -74,8 +74,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const res = await api.login(username, password);
+  const login = async (username: string, password: string, portal?: 'student' | 'staff') => {
+    const res = await api.login(username, password, portal);
+    if (portal === 'student' && res.user.role !== 'student') {
+      throw new Error('Akun Admin atau Guru tidak dapat masuk melalui halaman login siswa.');
+    }
+    if (portal === 'staff' && res.user.role === 'student') {
+      throw new Error('Akun siswa tidak dapat masuk melalui halaman login Admin / Guru.');
+    }
     setUser(res.user);
     localStorage.setItem('cbt_user_session', JSON.stringify(res.user));
   };
@@ -106,17 +112,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Firebase Email/Password Provider Login specifically for Administrator
+  // Firebase Email/Password Provider Login specifically for Staff (Admin / Guru)
   const loginAdminEmail = async (email: string, pass: string) => {
     setLoading(true);
     try {
       const fbUser = await loginWithEmailPassword(email, pass);
+      const emailLower = (fbUser.email || email).toLowerCase();
+      let matchedRole: UserRole | null = null;
+      let matchedName = fbUser.displayName || 'Administrator';
+      try {
+        const usersRes = await api.getUsers();
+        const existing = (usersRes.users || []).find(
+          (u) => (u.email || '').toLowerCase() === emailLower
+        );
+        if (existing) {
+          if (existing.role === 'student') {
+            await logoutFirebase();
+            throw new Error('Akun siswa tidak dapat masuk melalui halaman login Admin / Guru.');
+          }
+          matchedRole = existing.role;
+          matchedName = existing.name || matchedName;
+        }
+      } catch (err: any) {
+        if (err?.message?.includes('Akun siswa')) throw err;
+      }
+
       const mappedUser: User = {
         id: fbUser.uid,
         username: fbUser.email?.split('@')[0] || 'admin_email',
-        name: fbUser.displayName || 'Administrator (Firebase Auth)',
+        name: matchedName,
         email: fbUser.email || email,
-        role: 'admin',
+        role: matchedRole || 'admin',
         isActive: true,
         lastLogin: new Date().toISOString(),
       };
@@ -150,38 +176,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await login(role, 'siswa123');
       } catch {
-        const fallbackUsers: Record<UserRole, User> = {
-          admin: {
-            id: 'usr-admin-1',
-            username: 'admin',
-            name: 'Drs. Hendro Wibowo, M.Pd.',
-            role: 'admin',
-            email: 'admin@sman1prestasi.sch.id',
-            isActive: true,
-          },
-          teacher: {
-            id: 'usr-teacher-1',
-            username: 'guru',
-            name: 'Ahmad Fauzi, S.Pd., M.Si.',
-            role: 'teacher',
-            email: 'ahmad.fauzi@sman1prestasi.sch.id',
-            nip: '198403152009021004',
-            subjectSpecialty: 'Fisika & Matematika IPA',
-            isActive: true,
-          },
-          student: {
-            id: 'usr-student-1',
-            username: 'siswa',
-            name: 'Siswa Demo CBT',
-            role: 'student',
-            nis: '20241001',
-            classId: 'cls-xii-mipa-1',
-            isActive: true,
-          },
+        try {
+          const res = await api.getUsers();
+          const roleMatch = (res.users || []).find((u) => u.role === role && u.isActive !== false);
+          if (roleMatch) {
+            setUser(roleMatch);
+            localStorage.setItem('cbt_user_session', JSON.stringify(roleMatch));
+            return;
+          }
+        } catch {}
+        const genericProfile: User = {
+          id: `preview-${role}`,
+          username: role,
+          name: role === 'admin' ? 'Administrator' : role === 'teacher' ? 'Guru Mapel' : 'Peserta Didik',
+          role,
+          email: '',
+          isActive: true,
         };
-        const selectedFallback = fallbackUsers[role];
-        setUser(selectedFallback);
-        localStorage.setItem('cbt_user_session', JSON.stringify(selectedFallback));
+        setUser(genericProfile);
+        localStorage.setItem('cbt_user_session', JSON.stringify(genericProfile));
       }
     }
   };

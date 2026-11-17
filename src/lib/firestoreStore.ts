@@ -11,65 +11,101 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import initialDb from '../../data/cbt_database.json';
+import {
+  assignMissingQuestionCodes,
+  generateNextQuestionCode,
+  getSubjectCodePrefix,
+  isQuestionCodeDuplicate,
+} from './questionCode';
+import { generateRandomPassword } from './passwordUtils';
+import { computeLiveStudentScore } from './liveScore';
+import { isQuestionInExamScope, evaluateScopeAvailability } from './examPool';
 
-let isSeedingCompleted = false;
+const DEFAULT_ACADEMIC_YEARS = [
+  { id: 'ay-2024-genap', name: '2024/2025', semester: 'Genap', isActive: true },
+  { id: 'ay-2024-ganjil', name: '2024/2025', semester: 'Ganjil', isActive: false },
+];
 
-/**
- * Ensures Firestore is populated with initial SMA CBT seed data if Firestore collections are empty.
- */
-export async function seedFirestoreIfEmpty() {
-  if (isSeedingCompleted) return;
-  try {
-    const usersSnap = await getDocs(collection(db, 'users'));
-    if (usersSnap.empty) {
-      console.log('[Firestore] Seeding initial CBT database to Cloud Firestore...');
+const DEFAULT_SETTINGS = {
+  schoolName: '',
+  schoolLogoUrl: '',
+  loginBackgroundUrl: '',
+  appSubtitle: '',
+  academicYearText: '2024/2025 Genap',
+};
 
-      // Seed Users
-      for (const u of initialDb.users || []) {
-        await setDoc(doc(db, 'users', u.id), u);
-      }
+async function findTaxonomyDocRef(type: string, id: string) {
+  const directId = `${type}-${id}`;
+  const directRef = doc(db, 'taxonomy', directId);
+  const directSnap = await getDoc(directRef);
+  if (directSnap.exists()) return directRef;
 
-      // Seed Classes
-      for (const c of initialDb.classes || []) {
-        await setDoc(doc(db, 'classes', c.id), c);
-      }
+  const altRef = doc(db, 'taxonomy', id);
+  const altSnap = await getDoc(altRef);
+  if (altSnap.exists()) return altRef;
 
-      // Seed Subjects & Taxonomy
-      for (const s of initialDb.subjects || []) {
-        await setDoc(doc(db, 'taxonomy', `subject-${s.id}`), { type: 'subject', ...s });
-      }
-      for (const ch of initialDb.chapters || []) {
-        await setDoc(doc(db, 'taxonomy', `chapter-${ch.id}`), { type: 'chapter', ...ch });
-      }
-
-      // Seed Questions
-      for (const q of initialDb.questions || []) {
-        await setDoc(doc(db, 'questions', q.id), q);
-      }
-
-      // Seed Exams
-      for (const ex of initialDb.exams || []) {
-        await setDoc(doc(db, 'exams', ex.id), ex);
-      }
-
-      console.log('[Firestore] Cloud Firestore database successfully seeded!');
-    }
-    isSeedingCompleted = true;
-  } catch (error) {
-    console.warn('[Firestore] Auto-seed warning:', error);
-  }
+  const snap = await getDocs(
+    query(collection(db, 'taxonomy'), where('type', '==', type), where('id', '==', id))
+  );
+  if (!snap.empty) return snap.docs[0].ref;
+  return directRef;
 }
 
 export const firestoreStore = {
+  // --- SETTINGS ---
+  getSettings: async () => {
+    const path = 'settings/school_info';
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'school_info'));
+      if (snap.exists()) {
+        return { settings: { ...DEFAULT_SETTINGS, ...snap.data() } };
+      }
+      return { settings: DEFAULT_SETTINGS };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, path);
+    }
+  },
+
+  updateSettings: async (settingsData: Record<string, any>) => {
+    const path = 'settings/school_info';
+    try {
+      const ref = doc(db, 'settings', 'school_info');
+      const snap = await getDoc(ref);
+      const current = snap.exists() ? snap.data() : DEFAULT_SETTINGS;
+      const updated = {
+        ...DEFAULT_SETTINGS,
+        ...current,
+        ...settingsData,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(ref, updated, { merge: true });
+      return { success: true, settings: updated, message: 'Pengaturan sekolah berhasil disimpan ke Firestore.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  // --- ACTIVITY LOGS ---
+  getActivityLogs: async () => {
+    const path = 'activity_logs';
+    try {
+      const snap = await getDocs(collection(db, path));
+      const logs = snap.docs
+        .map((d) => d.data())
+        .sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+      return { logs };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
   // --- CLASSES ---
   getClasses: async () => {
     const path = 'classes';
     try {
-      await seedFirestoreIfEmpty();
       const snap = await getDocs(collection(db, path));
       const classes = snap.docs.map((d) => d.data());
-      return { classes, academicYears: initialDb.academicYears || [] };
+      return { classes, academicYears: DEFAULT_ACADEMIC_YEARS };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
     }
@@ -113,7 +149,6 @@ export const firestoreStore = {
     const path = `classes/${id}`;
     try {
       await deleteDoc(doc(db, 'classes', id));
-      // Unlink users in this class
       const usersSnap = await getDocs(query(collection(db, 'users'), where('classId', '==', id)));
       for (const uDoc of usersSnap.docs) {
         await updateDoc(uDoc.ref, { classId: '' });
@@ -128,11 +163,13 @@ export const firestoreStore = {
   getUsers: async () => {
     const path = 'users';
     try {
-      await seedFirestoreIfEmpty();
       const snap = await getDocs(collection(db, path));
       const users = snap.docs.map((d) => {
         const u = d.data();
         delete u.passwordHash;
+        if (u.role !== 'student') {
+          delete u.plainPassword;
+        }
         return u;
       });
       return { users };
@@ -145,19 +182,23 @@ export const firestoreStore = {
     const path = 'users';
     try {
       const id = userData.id || `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const newUser = {
+      const newUser: any = {
         id,
         username: userData.username,
         name: userData.name,
         role: userData.role || 'student',
         email: userData.email || '',
-        nis: userData.role === 'student' ? (userData.nis || userData.username) : undefined,
-        classId: userData.role === 'student' ? (userData.classId || '') : undefined,
-        nip: userData.role === 'teacher' ? (userData.nip || '') : undefined,
-        subjectSpecialty: userData.role === 'teacher' ? (userData.subjectSpecialty || '') : undefined,
         isActive: userData.isActive !== false,
         createdAt: new Date().toISOString(),
       };
+      if (newUser.role === 'student') {
+        newUser.nis = userData.nis || userData.username;
+        newUser.classId = userData.classId || '';
+        newUser.plainPassword = userData.password || userData.plainPassword || 'siswa123';
+      } else if (newUser.role === 'teacher') {
+        newUser.nip = userData.nip || '';
+        newUser.subjectSpecialty = userData.subjectSpecialty || '';
+      }
       await setDoc(doc(db, path, id), newUser);
       return { success: true, user: newUser };
     } catch (error) {
@@ -179,6 +220,10 @@ export const firestoreStore = {
       if (userData.classId !== undefined) updatePayload.classId = userData.classId;
       if (userData.nip !== undefined) updatePayload.nip = userData.nip;
       if (userData.subjectSpecialty !== undefined) updatePayload.subjectSpecialty = userData.subjectSpecialty;
+      if (userData.password && String(userData.password).trim().length > 0) {
+        updatePayload.passwordCustom = true;
+        updatePayload.plainPassword = String(userData.password).trim();
+      }
       updatePayload.updatedAt = new Date().toISOString();
 
       await updateDoc(ref, updatePayload);
@@ -221,6 +266,7 @@ export const firestoreStore = {
           role: 'student',
           nis: s.nis || username,
           classId: s.classId || '',
+          plainPassword: s.password || 'siswa123',
           email: s.email || '',
           isActive: true,
           createdAt: new Date().toISOString(),
@@ -233,14 +279,62 @@ export const firestoreStore = {
     }
   },
 
+  bulkGenerateStudentPasswords: async (classId?: string) => {
+    const path = 'users';
+    try {
+      const q = classId
+        ? query(collection(db, path), where('role', '==', 'student'), where('classId', '==', classId))
+        : query(collection(db, path), where('role', '==', 'student'));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        throw new Error('Tidak ada siswa ditemukan pada cakupan yang dipilih.');
+      }
+
+      const now = new Date().toISOString();
+      const docs = snap.docs;
+      const chunkSize = 400;
+      for (let i = 0; i < docs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        const slice = docs.slice(i, i + chunkSize);
+        for (const d of slice) {
+          const randomPass = generateRandomPassword(6);
+          batch.update(d.ref, {
+            passwordCustom: true,
+            plainPassword: randomPass,
+            updatedAt: now,
+          });
+        }
+        await batch.commit();
+      }
+
+      return {
+        success: true,
+        count: docs.length,
+        message: `Berhasil mengacak password baru untuk ${docs.length} siswa di Cloud Firestore.`,
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
   // --- QUESTIONS ---
   getQuestions: async () => {
     const path = 'questions';
     try {
-      await seedFirestoreIfEmpty();
-      const snap = await getDocs(collection(db, path));
-      const questions = snap.docs.map((d) => d.data());
-      return { questions };
+      const [qSnap, subjSnap] = await Promise.all([
+        getDocs(collection(db, path)),
+        getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
+      ]);
+      const rawQuestions = qSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+      const subjects = subjSnap.docs.map((d) => d.data()) as any[];
+      const codeSync = assignMissingQuestionCodes(rawQuestions, subjects);
+
+      if (codeSync.updatedQuestions.length > 0) {
+        for (const uq of codeSync.updatedQuestions) {
+          await updateDoc(doc(db, path, uq.id), { code: uq.code });
+        }
+      }
+      return { questions: codeSync.questions };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
     }
@@ -249,11 +343,28 @@ export const firestoreStore = {
   createQuestion: async (question: any) => {
     const path = 'questions';
     try {
-      const id = question.id || `q-${Date.now()}`;
+      const [qSnap, subjSnap] = await Promise.all([
+        getDocs(collection(db, path)),
+        getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
+      ]);
+      const existingQuestions = qSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+      const subjects = subjSnap.docs.map((d) => d.data()) as any[];
+
+      let finalCode = typeof question.code === 'string' ? question.code.trim().toUpperCase() : '';
+      if (finalCode) {
+        if (isQuestionCodeDuplicate(finalCode, existingQuestions)) {
+          throw new Error(`Kode soal "${finalCode}" sudah digunakan oleh soal lain.`);
+        }
+      } else {
+        finalCode = generateNextQuestionCode(question.subjectId, existingQuestions, subjects);
+      }
+
+      const id = question.id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const newQ = {
         ...question,
         id,
-        status: question.status || 'Aktif',
+        code: finalCode,
+        status: question.status || 'active',
         createdAt: new Date().toISOString(),
       };
       await setDoc(doc(db, path, id), newQ);
@@ -263,12 +374,84 @@ export const firestoreStore = {
     }
   },
 
+  bulkCreateQuestions: async (items: any[]) => {
+    const path = 'questions';
+    try {
+      const [qSnap, subjSnap] = await Promise.all([
+        getDocs(collection(db, path)),
+        getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
+      ]);
+      const runningPool = qSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+      const subjects = subjSnap.docs.map((d) => d.data()) as any[];
+
+      let count = 0;
+      for (const question of items) {
+        const targetSubjectId = question.subjectId || subjects[0]?.id || '';
+        const requestedCode = typeof question.code === 'string' ? question.code.trim().toUpperCase() : '';
+        const finalCode =
+          requestedCode && !isQuestionCodeDuplicate(requestedCode, runningPool)
+            ? requestedCode
+            : generateNextQuestionCode(targetSubjectId, runningPool, subjects);
+
+        const id = question.id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const newQ = {
+          ...question,
+          id,
+          code: finalCode,
+          subjectId: targetSubjectId,
+          status: question.status || 'active',
+          createdAt: new Date().toISOString(),
+        };
+        await setDoc(doc(db, path, id), newQ);
+        runningPool.push(newQ);
+        count++;
+      }
+      return { success: true, count, message: `Berhasil mengimpor ${count} butir soal.` };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
   updateQuestion: async (id: string, question: any) => {
     const path = `questions/${id}`;
     try {
       const ref = doc(db, 'questions', id);
+      const [curSnap, qSnap, subjSnap] = await Promise.all([
+        getDoc(ref),
+        getDocs(collection(db, 'questions')),
+        getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
+      ]);
+      const existing = curSnap.exists() ? (curSnap.data() as any) : {};
+      const existingQuestions = qSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
+      const subjects = subjSnap.docs.map((d) => d.data()) as any[];
+
+      const nextSubjectId = question.subjectId !== undefined ? question.subjectId : existing.subjectId;
+      const subjectChanged = nextSubjectId !== existing.subjectId;
+      let nextCode = existing.code || '';
+
+      if (question.code !== undefined) {
+        const requestedCode = String(question.code || '').trim().toUpperCase();
+        if (!requestedCode) {
+          nextCode = generateNextQuestionCode(nextSubjectId, existingQuestions, subjects, id);
+        } else if (
+          subjectChanged &&
+          requestedCode === (existing.code || '').trim().toUpperCase() &&
+          !requestedCode.startsWith(`${getSubjectCodePrefix(nextSubjectId, subjects)}-`)
+        ) {
+          nextCode = generateNextQuestionCode(nextSubjectId, existingQuestions, subjects, id);
+        } else {
+          if (isQuestionCodeDuplicate(requestedCode, existingQuestions, id)) {
+            throw new Error(`Kode soal "${requestedCode}" sudah digunakan oleh soal lain.`);
+          }
+          nextCode = requestedCode;
+        }
+      } else if (!nextCode || (subjectChanged && !nextCode.startsWith(`${getSubjectCodePrefix(nextSubjectId, subjects)}-`))) {
+        nextCode = generateNextQuestionCode(nextSubjectId, existingQuestions, subjects, id);
+      }
+
       await updateDoc(ref, {
         ...question,
+        code: nextCode,
         updatedAt: new Date().toISOString(),
       });
       const updatedSnap = await getDoc(ref);
@@ -292,10 +475,55 @@ export const firestoreStore = {
   getExams: async () => {
     const path = 'exams';
     try {
-      await seedFirestoreIfEmpty();
       const snap = await getDocs(collection(db, path));
       const exams = snap.docs.map((d) => d.data());
       return { exams };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
+  validateExamAvailability: async (payload: {
+    subjectId?: string;
+    selectedChapterIds?: string[];
+    selectedSubchapterIds?: string[];
+    selectedCompetencyIds?: string[];
+    cognitiveTarget?: {
+      lotsCount?: number;
+      motsCount?: number;
+      hotsCount?: number;
+      perScopeTargets?: any[];
+    };
+  }) => {
+    const path = 'questions';
+    try {
+      const [snap, taxSnap] = await Promise.all([
+        getDocs(collection(db, path)),
+        getDocs(collection(db, 'taxonomy')),
+      ]);
+      const questions = snap.docs.map((d) => d.data());
+      const taxItems = taxSnap.docs.map((d) => d.data() as any);
+      const subchapters: Array<{ id: string; chapterId: string }> = taxItems
+        .filter((t) => t.type === 'subchapter')
+        .map((t) => ({ id: String(t.id || ''), chapterId: String(t.chapterId || '') }));
+      const competencies: Array<{ id: string; subchapterId: string }> = taxItems
+        .filter((t) => t.type === 'competency')
+        .map((t) => ({ id: String(t.id || ''), subchapterId: String(t.subchapterId || '') }));
+
+      const activePool = questions.filter((q: any) =>
+        isQuestionInExamScope(
+          q,
+          {
+            subjectId: payload.subjectId,
+            selectedChapterIds: payload.selectedChapterIds,
+            selectedSubchapterIds: payload.selectedSubchapterIds,
+            selectedCompetencyIds: payload.selectedCompetencyIds,
+          },
+          { subchapters, competencies }
+        )
+      );
+
+      return evaluateScopeAvailability(activePool, payload.cognitiveTarget);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
     }
@@ -308,7 +536,7 @@ export const firestoreStore = {
       const newExam = {
         id,
         title: examData.title || 'Ujian Baru',
-        subjectId: examData.subjectId || 'sub-fisika',
+        subjectId: examData.subjectId || '',
         academicYearId: examData.academicYearId || 'ay-2024-genap',
         semester: examData.semester || 'Genap',
         targetClassIds: examData.targetClassIds || [],
@@ -326,21 +554,33 @@ export const firestoreStore = {
           hotsCount: examData.hotsCount || 5,
           totalQuestions: examData.totalQuestions || 20,
         },
-        status: 'draft',
+        scoringConfig: {
+          pgKompleksMode: examData.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial',
+          useMinusSystem: Boolean(examData.scoringConfig?.useMinusSystem),
+          minusValue: Math.max(0, Number(examData.scoringConfig?.minusValue) || 0),
+          weights: {
+            LOTS: Math.max(0, Number(examData.scoringConfig?.weights?.LOTS ?? 10) || 0),
+            MOTS: Math.max(0, Number(examData.scoringConfig?.weights?.MOTS ?? 10) || 0),
+            HOTS: Math.max(0, Number(examData.scoringConfig?.weights?.HOTS ?? 10) || 0),
+          },
+        },
+        status: 'active',
         token: examData.token || Math.random().toString(36).substring(2, 8).toUpperCase(),
         tokenAutoRotate: Boolean(examData.tokenAutoRotate),
         tokenIntervalMinutes: examData.tokenIntervalMinutes || 15,
         tokenUpdatedAt: new Date().toISOString(),
         isTokenActive: true,
         antiCheating: examData.antiCheating || {
-          blockTabSwitch: true,
           forceFullscreen: true,
-          blockClipboard: true,
-          warningLimit: 3,
-          autoSubmitOnLimit: true,
+          detectTabSwitch: true,
+          blockRightClick: true,
+          blockCopyPaste: true,
+          maxToleranceViolations: 3,
+          autoSubmitOnViolationLimit: false,
         },
         isPublishedResults: false,
-        createdTeacherId: examData.createdTeacherId || 'usr-teacher-1',
+        showLiveScore: Boolean(examData.showLiveScore),
+        createdTeacherId: examData.createdTeacherId || examData.teacherId || '',
         createdAt: new Date().toISOString(),
       };
       await setDoc(doc(db, path, id), newExam);
@@ -350,27 +590,476 @@ export const firestoreStore = {
     }
   },
 
+  updateExam: async (id: string, examData: any) => {
+    const path = `exams/${id}`;
+    try {
+      const ref = doc(db, 'exams', id);
+      await updateDoc(ref, {
+        ...examData,
+        updatedAt: new Date().toISOString(),
+      });
+      const updatedSnap = await getDoc(ref);
+      return { success: true, exam: updatedSnap.data() };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  toggleLiveScore: async (examId: string, showLiveScore?: boolean) => {
+    const path = `exams/${examId}`;
+    try {
+      const ref = doc(db, 'exams', examId);
+      const snap = await getDoc(ref);
+      const current = snap.exists() ? Boolean(snap.data()?.showLiveScore) : false;
+      const nextValue = typeof showLiveScore === 'boolean' ? showLiveScore : !current;
+      await updateDoc(ref, {
+        showLiveScore: nextValue,
+        updatedAt: new Date().toISOString(),
+      });
+      return { success: true, showLiveScore: nextValue };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  getMonitoringData: async (examId: string) => {
+    const path = `exams/${examId}`;
+    try {
+      const [examSnap, usersSnap, classesSnap, sessionsSnap, resultsSnap, questionsSnap] = await Promise.all([
+        getDoc(doc(db, 'exams', examId)),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+        getDocs(collection(db, 'classes')),
+        getDocs(query(collection(db, 'exam_sessions'), where('examId', '==', examId))),
+        getDocs(query(collection(db, 'exam_results'), where('examId', '==', examId))),
+        getDocs(collection(db, 'questions')),
+      ]);
+
+      const exam = examSnap.exists() ? examSnap.data() : null;
+      if (!exam) {
+        throw new Error('Ujian tidak ditemukan.');
+      }
+
+      const targetClassIds: string[] = Array.isArray(exam.targetClassIds) ? exam.targetClassIds : [];
+      const students = usersSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((u: any) => targetClassIds.includes(u.classId));
+
+      const classMap = new Map<string, string>();
+      for (const c of classesSnap.docs) {
+        const data = c.data();
+        classMap.set(data.id || c.id, data.name || 'Kelas');
+      }
+
+      const sessionMap = new Map<string, any>();
+      for (const s of sessionsSnap.docs) {
+        const data = s.data();
+        if (data.studentId) sessionMap.set(data.studentId, data);
+      }
+
+      const resultMap = new Map<string, any>();
+      for (const r of resultsSnap.docs) {
+        const data = r.data();
+        if (data.studentId) resultMap.set(data.studentId, data);
+      }
+
+      const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const showLiveScore = Boolean(exam.showLiveScore);
+      const now = Date.now();
+
+      const monitorData = students.map((student: any) => {
+        const session = sessionMap.get(student.id);
+        const result = resultMap.get(student.id);
+
+        let status = 'not_started';
+        let remainingSeconds = (exam.durationMinutes || 60) * 60;
+        let currentQuestionIndex = 0;
+        let answeredCount = 0;
+        const totalQuestions = session?.questionIds?.length || exam.cognitiveTarget?.totalQuestions || 5;
+        let violationCount = 0;
+        let violations: any[] = [];
+
+        if (session) {
+          status = session.status || 'in_progress';
+          remainingSeconds = session.remainingSeconds ?? 0;
+          currentQuestionIndex = session.currentQuestionIndex || 0;
+          answeredCount = Object.values(session.answers || {}).filter(
+            (v: any) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
+          ).length;
+          violationCount = session.violationCount || 0;
+          violations = session.violations || [];
+
+          if (status === 'in_progress' && session.lastHeartbeat) {
+            const diff = now - new Date(session.lastHeartbeat).getTime();
+            if (diff > 60000) status = 'disconnected';
+          }
+        }
+
+        const scoreInfo = computeLiveStudentScore({
+          session,
+          result,
+          allQuestions,
+          exam,
+        });
+
+        return {
+          studentId: student.id,
+          name: student.name,
+          nis: student.nis || student.username,
+          classId: student.classId,
+          className: classMap.get(student.classId) || 'Kelas',
+          status,
+          remainingSeconds,
+          currentQuestionIndex,
+          answeredCount,
+          totalQuestions,
+          progressPercent: totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0,
+          violationCount,
+          violations,
+          hasFinished: status === 'completed',
+          finalScore: showLiveScore && result ? result.finalScore : null,
+          liveScore: showLiveScore ? scoreInfo.liveScore : null,
+          liveCorrectCount: showLiveScore ? scoreInfo.liveCorrectCount : 0,
+          isPassed: result ? result.isPassed : null,
+        };
+      });
+
+      const summary = {
+        totalStudents: students.length,
+        notStarted: monitorData.filter((s) => s.status === 'not_started').length,
+        inProgress: monitorData.filter((s) => s.status === 'in_progress').length,
+        completed: monitorData.filter((s) => s.status === 'completed').length,
+        disconnected: monitorData.filter((s) => s.status === 'disconnected').length,
+        suspicious: monitorData.filter((s) => s.status === 'suspicious' || s.violationCount > 1).length,
+      };
+
+      return {
+        exam: {
+          id: exam.id,
+          title: exam.title,
+          token: exam.token,
+          isTokenActive: exam.isTokenActive,
+          durationMinutes: exam.durationMinutes,
+          scheduleEnd: exam.scheduleEnd,
+          kktpScore: exam.kktpScore,
+          maxScore: exam.maxScore || 100,
+          showLiveScore,
+        },
+        summary,
+        students: monitorData,
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, path);
+    }
+  },
+
+  manageStudentSession: async (
+    examId: string,
+    studentId: string,
+    action: 'ADD_TIME' | 'RESET_SESSION',
+    additionalMinutes?: number
+  ) => {
+    const sessionKey = `${examId}_${studentId}`;
+    const sessionPath = `exam_sessions/${sessionKey}`;
+    try {
+      if (action === 'ADD_TIME') {
+        const ref = doc(db, 'exam_sessions', sessionKey);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) throw new Error('Sesi siswa tidak ditemukan.');
+        const current = Number(snap.data()?.remainingSeconds) || 0;
+        const added = (Number(additionalMinutes) || 10) * 60;
+        await updateDoc(ref, { remainingSeconds: current + added });
+        return { success: true, message: `Berhasil menambahkan waktu ${additionalMinutes || 10} menit.` };
+      }
+      if (action === 'RESET_SESSION') {
+        await Promise.all([
+          deleteDoc(doc(db, 'exam_sessions', sessionKey)),
+          deleteDoc(doc(db, 'exam_results', sessionKey)),
+        ]);
+        return { success: true, message: 'Sesi siswa berhasil direset. Siswa dapat memulai ulang.' };
+      }
+      throw new Error('Aksi tidak valid.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, sessionPath);
+    }
+  },
+
+  getExamResults: async (examId: string) => {
+    const path = 'exam_results';
+    try {
+      const [examSnap, resultsSnap] = await Promise.all([
+        getDoc(doc(db, 'exams', examId)),
+        getDocs(query(collection(db, path), where('examId', '==', examId))),
+      ]);
+      const exam = examSnap.exists() ? examSnap.data() : null;
+      const results = resultsSnap.docs.map((d) => d.data());
+      const scores = results.map((r: any) => r.finalScore || 0);
+      const highest = scores.length ? Math.max(...scores) : 0;
+      const lowest = scores.length ? Math.min(...scores) : 0;
+      const average = scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0;
+      const sorted = [...scores].sort((a, b) => a - b);
+      const median = sorted.length
+        ? sorted.length % 2 === 0
+          ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+          : sorted[Math.floor(sorted.length / 2)]
+        : 0;
+      const passedCount = results.filter((r: any) => r.isPassed).length;
+      const passingRate = results.length ? Math.round((passedCount / results.length) * 100) : 0;
+
+      return {
+        exam,
+        results,
+        stats: {
+          totalParticipants: results.length,
+          highest,
+          lowest,
+          average,
+          median,
+          passedCount,
+          failedCount: results.length - passedCount,
+          passingRate,
+        },
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
   // --- TAXONOMY ---
   getTaxonomy: async () => {
     const path = 'taxonomy';
     try {
-      await seedFirestoreIfEmpty();
       const snap = await getDocs(collection(db, path));
-      const items = snap.docs.map((d) => d.data());
+      const items = snap.docs.map((d) => ({ docId: d.id, ...d.data() }));
 
-      const subjects = items.filter((i) => i.type === 'subject') || initialDb.subjects;
-      const chapters = items.filter((i) => i.type === 'chapter') || initialDb.chapters;
-      const subchapters = initialDb.subchapters;
-      const competencies = initialDb.competencies;
+      const stripMeta = ({ type: _t, docId: _d, ...rest }: any) => rest;
+      const subjects = items.filter((i: any) => i.type === 'subject').map(stripMeta);
+      const chapters = items.filter((i: any) => i.type === 'chapter').map(stripMeta);
+      const subchapters = items.filter((i: any) => i.type === 'subchapter').map(stripMeta);
+      const competencies = items.filter((i: any) => i.type === 'competency').map(stripMeta);
 
-      return {
-        subjects: subjects.length ? subjects : initialDb.subjects,
-        chapters: chapters.length ? chapters : initialDb.chapters,
-        subchapters,
-        competencies,
-      };
+      return { subjects, chapters, subchapters, competencies };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
+  createSubject: async (subjectData: { name: string; code?: string }) => {
+    const path = 'taxonomy';
+    try {
+      const id = `sbj-${Date.now()}`;
+      const subject = {
+        id,
+        name: (subjectData.name || '').trim(),
+        code: (subjectData.code || subjectData.name.substring(0, 3).toUpperCase()).trim(),
+      };
+      await setDoc(doc(db, path, `subject-${id}`), { type: 'subject', ...subject });
+      return { success: true, subject };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
+  updateSubject: async (id: string, subjectData: { name?: string; code?: string }) => {
+    const path = `taxonomy/subject-${id}`;
+    try {
+      const ref = await findTaxonomyDocRef('subject', id);
+      const payload: any = {};
+      if (subjectData.name !== undefined) payload.name = subjectData.name.trim();
+      if (subjectData.code !== undefined) payload.code = subjectData.code.trim();
+      await updateDoc(ref, payload);
+      const snap = await getDoc(ref);
+      const data = snap.data() || {};
+      delete data.type;
+      return { success: true, subject: data, message: 'Mata pelajaran berhasil diperbarui.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  deleteSubject: async (id: string) => {
+    const path = `taxonomy/subject-${id}`;
+    try {
+      const allSnap = await getDocs(collection(db, 'taxonomy'));
+      const allDocs = allSnap.docs.map((d) => ({ ref: d.ref, data: d.data() }));
+      const chapterIds = allDocs
+        .filter((d) => d.data.type === 'chapter' && d.data.subjectId === id)
+        .map((d) => d.data.id);
+      const subchapterIds = allDocs
+        .filter((d) => d.data.type === 'subchapter' && chapterIds.includes(d.data.chapterId))
+        .map((d) => d.data.id);
+
+      const subjectRef = await findTaxonomyDocRef('subject', id);
+      await deleteDoc(subjectRef);
+
+      for (const d of allDocs) {
+        if (
+          (d.data.type === 'chapter' && d.data.subjectId === id) ||
+          (d.data.type === 'subchapter' && chapterIds.includes(d.data.chapterId)) ||
+          (d.data.type === 'competency' && subchapterIds.includes(d.data.subchapterId))
+        ) {
+          await deleteDoc(d.ref);
+        }
+      }
+      return { success: true, message: 'Mata pelajaran dan taksonomi turunannya berhasil dihapus.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  createChapter: async (chapterData: { subjectId: string; name: string }) => {
+    const path = 'taxonomy';
+    try {
+      const id = `ch-${Date.now()}`;
+      const chapter = {
+        id,
+        subjectId: chapterData.subjectId,
+        name: (chapterData.name || '').trim(),
+      };
+      await setDoc(doc(db, path, `chapter-${id}`), { type: 'chapter', ...chapter });
+      return { success: true, chapter };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
+  updateChapter: async (id: string, chapterData: { name?: string; subjectId?: string }) => {
+    const path = `taxonomy/chapter-${id}`;
+    try {
+      const ref = await findTaxonomyDocRef('chapter', id);
+      const payload: any = {};
+      if (chapterData.name !== undefined) payload.name = chapterData.name.trim();
+      if (chapterData.subjectId !== undefined) payload.subjectId = chapterData.subjectId;
+      await updateDoc(ref, payload);
+      const snap = await getDoc(ref);
+      const data = snap.data() || {};
+      delete data.type;
+      return { success: true, chapter: data, message: 'Bab berhasil diperbarui.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  deleteChapter: async (id: string) => {
+    const path = `taxonomy/chapter-${id}`;
+    try {
+      const allSnap = await getDocs(collection(db, 'taxonomy'));
+      const allDocs = allSnap.docs.map((d) => ({ ref: d.ref, data: d.data() }));
+      const subchapterIds = allDocs
+        .filter((d) => d.data.type === 'subchapter' && d.data.chapterId === id)
+        .map((d) => d.data.id);
+
+      const chapterRef = await findTaxonomyDocRef('chapter', id);
+      await deleteDoc(chapterRef);
+
+      for (const d of allDocs) {
+        if (
+          (d.data.type === 'subchapter' && d.data.chapterId === id) ||
+          (d.data.type === 'competency' && subchapterIds.includes(d.data.subchapterId))
+        ) {
+          await deleteDoc(d.ref);
+        }
+      }
+      return { success: true, message: 'Bab dan taksonomi turunannya berhasil dihapus.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  createSubchapter: async (subData: { chapterId: string; name: string }) => {
+    const path = 'taxonomy';
+    try {
+      const id = `sub-${Date.now()}`;
+      const subchapter = {
+        id,
+        chapterId: subData.chapterId,
+        name: (subData.name || '').trim(),
+      };
+      await setDoc(doc(db, path, `subchapter-${id}`), { type: 'subchapter', ...subchapter });
+      return { success: true, subchapter };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
+  updateSubchapter: async (id: string, subData: { name?: string; chapterId?: string }) => {
+    const path = `taxonomy/subchapter-${id}`;
+    try {
+      const ref = await findTaxonomyDocRef('subchapter', id);
+      const payload: any = {};
+      if (subData.name !== undefined) payload.name = subData.name.trim();
+      if (subData.chapterId !== undefined) payload.chapterId = subData.chapterId;
+      await updateDoc(ref, payload);
+      const snap = await getDoc(ref);
+      const data = snap.data() || {};
+      delete data.type;
+      return { success: true, subchapter: data, message: 'Sub Bab berhasil diperbarui.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  deleteSubchapter: async (id: string) => {
+    const path = `taxonomy/subchapter-${id}`;
+    try {
+      const allSnap = await getDocs(collection(db, 'taxonomy'));
+      const subRef = await findTaxonomyDocRef('subchapter', id);
+      await deleteDoc(subRef);
+
+      for (const d of allSnap.docs) {
+        const data = d.data();
+        if (data.type === 'competency' && data.subchapterId === id) {
+          await deleteDoc(d.ref);
+        }
+      }
+      return { success: true, message: 'Sub Bab dan indikator turunannya berhasil dihapus.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  createCompetency: async (compData: { subchapterId: string; code: string; description: string }) => {
+    const path = 'taxonomy';
+    try {
+      const id = `cmp-${Date.now()}`;
+      const competency = {
+        id,
+        subchapterId: compData.subchapterId,
+        code: (compData.code || '').trim(),
+        description: (compData.description || '').trim(),
+      };
+      await setDoc(doc(db, path, `competency-${id}`), { type: 'competency', ...competency });
+      return { success: true, competency };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  },
+
+  updateCompetency: async (id: string, compData: { code?: string; description?: string; subchapterId?: string }) => {
+    const path = `taxonomy/competency-${id}`;
+    try {
+      const ref = await findTaxonomyDocRef('competency', id);
+      const payload: any = {};
+      if (compData.code !== undefined) payload.code = compData.code.trim();
+      if (compData.description !== undefined) payload.description = compData.description.trim();
+      if (compData.subchapterId !== undefined) payload.subchapterId = compData.subchapterId;
+      await updateDoc(ref, payload);
+      const snap = await getDoc(ref);
+      const data = snap.data() || {};
+      delete data.type;
+      return { success: true, competency: data, message: 'Sub-Sub Bab berhasil diperbarui.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  deleteCompetency: async (id: string) => {
+    const path = `taxonomy/competency-${id}`;
+    try {
+      const ref = await findTaxonomyDocRef('competency', id);
+      await deleteDoc(ref);
+      return { success: true, message: 'Sub-Sub Bab berhasil dihapus.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
     }
   },
 };

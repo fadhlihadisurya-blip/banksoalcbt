@@ -68,6 +68,7 @@ export interface QuestionOption {
 
 export interface Question {
   id: string;
+  code?: string;
   subjectId: string;
   chapterId: string;
   subchapterId: string;
@@ -94,11 +95,37 @@ export interface AntiCheatingSettings {
   autoSubmitOnViolationLimit: boolean;
 }
 
+export interface NodeCognitiveComposition {
+  scopeType: 'competency' | 'subchapter' | 'chapter';
+  scopeId: string;
+  chapterId: string;
+  subchapterId?: string;
+  competencyId?: string;
+  label?: string;
+  lotsCount: number;
+  motsCount: number;
+  hotsCount: number;
+}
+
 export interface CognitiveTarget {
   lotsCount: number;
   motsCount: number;
   hotsCount: number;
   totalQuestions: number;
+  perScopeTargets?: NodeCognitiveComposition[];
+}
+
+export type PgKompleksScoringMode = 'partial' | 'exact';
+
+export interface ExamScoringConfig {
+  pgKompleksMode?: PgKompleksScoringMode;
+  useMinusSystem: boolean;
+  minusValue: number;
+  weights: {
+    LOTS: number;
+    MOTS: number;
+    HOTS: number;
+  };
 }
 
 export interface Exam {
@@ -117,6 +144,7 @@ export interface Exam {
   selectedSubchapterIds: string[];
   selectedCompetencyIds: string[];
   cognitiveTarget: CognitiveTarget;
+  scoringConfig?: ExamScoringConfig;
   token: string;
   tokenAutoRotate: boolean;
   tokenIntervalMinutes: number;
@@ -125,6 +153,7 @@ export interface Exam {
   antiCheating: AntiCheatingSettings;
   status: 'draft' | 'scheduled' | 'active' | 'completed' | 'archived';
   isPublishedResults: boolean;
+  showLiveScore?: boolean;
   createdTeacherId: string;
   createdAt?: string;
 }
@@ -183,6 +212,7 @@ export interface StudentQuestionItem {
   questionText: string;
   options?: QuestionOption[];
   points: number;
+  maxSelectable?: number;
 }
 
 export interface MonitoringStudent {
@@ -201,6 +231,8 @@ export interface MonitoringStudent {
   violations: ViolationEntry[];
   hasFinished: boolean;
   finalScore: number | null;
+  liveScore?: number | null;
+  liveCorrectCount?: number;
   isPassed: boolean | null;
 }
 
@@ -213,6 +245,8 @@ export interface MonitoringPayload {
     durationMinutes: number;
     scheduleEnd: string;
     kktpScore: number;
+    maxScore?: number;
+    showLiveScore?: boolean;
   };
   summary: {
     totalStudents: number;

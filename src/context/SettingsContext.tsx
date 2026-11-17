@@ -3,10 +3,10 @@ import { SchoolSettings } from '../types/cbt';
 import { api } from '../lib/api';
 
 const DEFAULT_SETTINGS: SchoolSettings = {
-  schoolName: 'SMAN 1 PRESTASI BANGSA',
+  schoolName: 'Portal CBT Sekolah',
   schoolLogoUrl: '',
   loginBackgroundUrl: '',
-  appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+  appSubtitle: 'Portal Ujian Berbasis Komputer',
   academicYearText: '2024/2025 Genap',
 };
 
