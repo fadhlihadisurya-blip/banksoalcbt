@@ -1346,6 +1346,51 @@ app.put('/api/exams/:id', async (req, res) => {
   res.json({ success: true, exam: db.exams[idx] });
 });
 
+app.delete('/api/exams/:id', async (req, res) => {
+  const { id } = req.params;
+  const idx = db.exams.findIndex((e: any) => e.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Ujian tidak ditemukan.' });
+
+  const [removed] = db.exams.splice(idx, 1);
+
+  const sessionKeysToDelete = Object.keys(db.examSessions || {}).filter(
+    (k) => k.startsWith(`${id}_`) || db.examSessions[k]?.examId === id
+  );
+  for (const sk of sessionKeysToDelete) {
+    delete db.examSessions[sk];
+    await deleteDocFromFirestore('exam_sessions', sk);
+  }
+
+  const resultKeysToDelete = Object.keys(db.examResults || {}).filter(
+    (k) => k.startsWith(`${id}_`) || db.examResults[k]?.examId === id
+  );
+  for (const rk of resultKeysToDelete) {
+    delete db.examResults[rk];
+    await deleteDocFromFirestore('exam_results', rk);
+  }
+
+  for (const pk of Object.keys(db.examPackages || {})) {
+    if (pk.startsWith(`${id}_`)) {
+      delete db.examPackages[pk];
+    }
+  }
+
+  const logEntry = {
+    id: `log-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    actorName: 'Guru / Admin',
+    role: 'teacher',
+    action: 'DELETE_EXAM',
+    details: `Menghapus Paket Ujian "${removed?.title || id}"`,
+  };
+  db.activityLogs.unshift(logEntry);
+
+  saveDatabase();
+  await deleteDocFromFirestore('exams', id);
+  await persistDocToFirestore('activity_logs', logEntry.id, logEntry);
+  res.json({ success: true, message: 'Paket ujian berhasil dihapus.' });
+});
+
 // Toggle publish score to students
 app.post('/api/exams/:id/publish', async (req, res) => {
   const { id } = req.params;
@@ -1429,13 +1474,12 @@ app.get('/api/student/exams', (req, res) => {
   const student = db.users.find((u: any) => u.id === studentId);
   if (!student) return res.status(404).json({ error: 'Data siswa tidak ditemukan.' });
 
-  const studentClassId = student.classId;
-  const now = new Date();
+  const studentClassId = student.classId || '';
 
   const availableExams = db.exams
     .filter((e: any) => {
       // Must target student's class
-      if (!e.targetClassIds.includes(studentClassId)) return false;
+      if (!Array.isArray(e.targetClassIds) || !e.targetClassIds.includes(studentClassId)) return false;
       return true;
     })
     .map((e: any) => {
@@ -1474,7 +1518,7 @@ app.post('/api/exams/:id/start', async (req, res) => {
   const student = db.users.find((u: any) => u.id === studentId);
   if (!student) return res.status(404).json({ error: 'Siswa tidak ditemukan.' });
 
-  if (!exam.targetClassIds.includes(student.classId)) {
+  if (!Array.isArray(exam.targetClassIds) || !exam.targetClassIds.includes(student.classId)) {
     return res.status(403).json({ error: 'Kelas Anda tidak terdaftar sebagai peserta ujian ini.' });
   }
 

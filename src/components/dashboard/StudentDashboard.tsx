@@ -140,12 +140,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
         {loading ? (
           <div className="text-center py-12 text-slate-400 text-xs">Memuat daftar ujian...</div>
         ) : exams.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs">
-            Belum ada ujian yang dijadwalkan untuk kelas Anda saat ini.
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-xs space-y-1.5">
+            <p className="font-semibold text-slate-700">
+              Belum ada ujian yang dijadwalkan untuk kelas Anda ({className || '-'}) saat ini.
+            </p>
+            <p className="text-[11px] text-slate-400">
+              Pastikan Guru/Admin telah memasukkan kelas <strong className="text-slate-600">{className || '-'}</strong> ke daftar kelas peserta pada paket ujian terkait.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {exams.map((exam) => (
+            {exams.map((exam) => {
+              const formatSchedule = (iso?: string) => {
+                if (!iso) return '-';
+                const d = new Date(iso);
+                if (Number.isNaN(d.getTime())) return '-';
+                return d.toLocaleString('id-ID', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+              };
+              return (
               <div
                 key={exam.id}
                 className="bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-all flex flex-col justify-between"
@@ -166,6 +183,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                   <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <span>
+                        Jadwal: <strong className="font-mono text-slate-700">{formatSchedule(exam.scheduleStart)}</strong> –{' '}
+                        <strong className="font-mono text-slate-700">{formatSchedule(exam.scheduleEnd)}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Award className="w-3.5 h-3.5 text-slate-400" />
                       <span>KKTP Minimum: <strong className="font-mono">{exam.kktpScore || 75}</strong></span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -224,7 +248,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

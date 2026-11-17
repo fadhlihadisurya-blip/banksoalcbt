@@ -36,6 +36,9 @@ function MainApp() {
   // Analytics Selected Exam
   const [analyticsExamId, setAnalyticsExamId] = useState<string>('');
 
+  // Refresh key for TeacherDashboard exam list
+  const [examListRefreshKey, setExamListRefreshKey] = useState(0);
+
   // Active Student Exam Session State
   const [activeExamSession, setActiveExamSession] = useState<{
     examId: string;
@@ -108,6 +111,7 @@ function MainApp() {
         case 'exams':
           return (
             <TeacherDashboard
+              refreshKey={examListRefreshKey}
               onNavigate={(tab) => setCurrentTab(tab)}
               onOpenExamGenerator={() => setShowExamGenerator(true)}
               onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
@@ -138,6 +142,7 @@ function MainApp() {
         case 'dashboard':
           return (
             <TeacherDashboard
+              refreshKey={examListRefreshKey}
               onNavigate={(tab) => setCurrentTab(tab)}
               onOpenExamGenerator={() => setShowExamGenerator(true)}
               onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
@@ -158,6 +163,7 @@ function MainApp() {
         case 'exams':
           return (
             <TeacherDashboard
+              refreshKey={examListRefreshKey}
               onNavigate={(tab) => setCurrentTab(tab)}
               onOpenExamGenerator={() => setShowExamGenerator(true)}
               onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
@@ -193,6 +199,7 @@ function MainApp() {
         default:
           return (
             <TeacherDashboard
+              refreshKey={examListRefreshKey}
               onNavigate={(tab) => setCurrentTab(tab)}
               onOpenExamGenerator={() => setShowExamGenerator(true)}
               onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
@@ -238,6 +245,7 @@ function MainApp() {
           isOpen={showExamGenerator}
           onClose={() => setShowExamGenerator(false)}
           onSuccess={() => {
+            setExamListRefreshKey((k) => k + 1);
             setCurrentTab('exams');
           }}
         />
@@ -249,7 +257,9 @@ function MainApp() {
           exam={selectedExamForToken}
           isOpen={!!selectedExamForToken}
           onClose={() => setSelectedExamForToken(null)}
-          onUpdate={() => {}}
+          onUpdate={() => {
+            setExamListRefreshKey((k) => k + 1);
+          }}
         />
       )}
     </AppLayout>

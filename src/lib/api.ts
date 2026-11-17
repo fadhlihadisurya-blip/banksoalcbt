@@ -312,6 +312,11 @@ export const api = {
       body: JSON.stringify(examData),
     }),
 
+  deleteExam: (id: string) =>
+    request<{ success: boolean; message?: string }>(`/exams/${id}`, {
+      method: 'DELETE',
+    }),
+
   togglePublishResults: (examId: string) =>
     request<{ success: boolean; isPublishedResults: boolean }>(`/exams/${examId}/publish`, {
       method: 'POST',

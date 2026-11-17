@@ -605,6 +605,26 @@ export const firestoreStore = {
     }
   },
 
+  deleteExam: async (id: string) => {
+    const path = `exams/${id}`;
+    try {
+      await deleteDoc(doc(db, 'exams', id));
+      const [sessionsSnap, resultsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'exam_sessions'), where('examId', '==', id))),
+        getDocs(query(collection(db, 'exam_results'), where('examId', '==', id))),
+      ]);
+      for (const sDoc of sessionsSnap.docs) {
+        await deleteDoc(sDoc.ref);
+      }
+      for (const rDoc of resultsSnap.docs) {
+        await deleteDoc(rDoc.ref);
+      }
+      return { success: true, message: 'Paket ujian berhasil dihapus.' };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
   toggleLiveScore: async (examId: string, showLiveScore?: boolean) => {
     const path = `exams/${examId}`;
     try {
@@ -619,6 +639,131 @@ export const firestoreStore = {
       return { success: true, showLiveScore: nextValue };
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  togglePublishResults: async (examId: string) => {
+    const path = `exams/${examId}`;
+    try {
+      const ref = doc(db, 'exams', examId);
+      const snap = await getDoc(ref);
+      const current = snap.exists() ? Boolean(snap.data()?.isPublishedResults) : false;
+      const nextValue = !current;
+      await updateDoc(ref, {
+        isPublishedResults: nextValue,
+        updatedAt: new Date().toISOString(),
+      });
+      return { success: true, isPublishedResults: nextValue };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  regenerateToken: async (examId: string) => {
+    const path = `exams/${examId}`;
+    try {
+      const chars = 'ABCDEF0123456789';
+      let token = '';
+      for (let i = 0; i < 6; i++) {
+        token += chars[Math.floor(Math.random() * chars.length)];
+      }
+      const tokenUpdatedAt = new Date().toISOString();
+      await updateDoc(doc(db, 'exams', examId), {
+        token,
+        tokenUpdatedAt,
+        updatedAt: tokenUpdatedAt,
+      });
+      return { success: true, token, tokenUpdatedAt };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  updateTokenSettings: async (
+    examId: string,
+    settings: { tokenAutoRotate?: boolean; tokenIntervalMinutes?: number; isTokenActive?: boolean }
+  ) => {
+    const path = `exams/${examId}`;
+    try {
+      const ref = doc(db, 'exams', examId);
+      const payload: any = { updatedAt: new Date().toISOString() };
+      if (typeof settings.tokenAutoRotate === 'boolean') payload.tokenAutoRotate = settings.tokenAutoRotate;
+      if (settings.tokenIntervalMinutes) payload.tokenIntervalMinutes = Number(settings.tokenIntervalMinutes);
+      if (typeof settings.isTokenActive === 'boolean') payload.isTokenActive = settings.isTokenActive;
+      await updateDoc(ref, payload);
+      const snap = await getDoc(ref);
+      return { success: true, exam: snap.data() };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  getStudentExams: async (studentId: string) => {
+    const path = 'exams';
+    try {
+      const [usersSnap, examsSnap, subjectsSnap, sessionsSnap, resultsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('id', '==', studentId))),
+        getDocs(collection(db, 'exams')),
+        getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
+        getDocs(query(collection(db, 'exam_sessions'), where('studentId', '==', studentId))),
+        getDocs(query(collection(db, 'exam_results'), where('studentId', '==', studentId))),
+      ]);
+
+      let studentData = !usersSnap.empty ? (usersSnap.docs[0].data() as any) : null;
+      if (!studentData) {
+        const directSnap = await getDoc(doc(db, 'users', studentId));
+        if (directSnap.exists()) {
+          studentData = directSnap.data();
+        }
+      }
+      if (!studentData) {
+        return { exams: [] };
+      }
+
+      const studentClassId = studentData.classId || '';
+      const subjectMap = new Map<string, string>();
+      for (const s of subjectsSnap.docs) {
+        const data = s.data() as any;
+        subjectMap.set(data.id || s.id, data.name || 'Mata Pelajaran');
+      }
+
+      const sessionMap = new Map<string, any>();
+      for (const s of sessionsSnap.docs) {
+        const data = s.data() as any;
+        if (data.examId) sessionMap.set(data.examId, data);
+      }
+
+      const resultMap = new Map<string, any>();
+      for (const r of resultsSnap.docs) {
+        const data = r.data() as any;
+        if (data.examId) resultMap.set(data.examId, data);
+      }
+
+      const exams = examsSnap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((e: any) => Array.isArray(e.targetClassIds) && e.targetClassIds.includes(studentClassId))
+        .map((e: any) => {
+          const session = sessionMap.get(e.id);
+          const result = resultMap.get(e.id);
+          return {
+            id: e.id,
+            title: e.title,
+            subject: subjectMap.get(e.subjectId) || 'Mata Pelajaran',
+            durationMinutes: e.durationMinutes,
+            scheduleStart: e.scheduleStart,
+            scheduleEnd: e.scheduleEnd,
+            isTokenActive: Boolean(e.isTokenActive),
+            isPublishedResults: Boolean(e.isPublishedResults),
+            studentStatus: result ? 'completed' : session ? session.status : 'not_started',
+            hasResult: Boolean(result),
+            score: e.isPublishedResults && result ? result.finalScore : null,
+            kktpScore: e.kktpScore,
+          };
+        });
+
+      return { exams };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
     }
   },
 

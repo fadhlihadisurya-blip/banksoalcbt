@@ -323,6 +323,46 @@ export const clientStore = {
       }
     }
 
+    if (cleanPath === '/student/exams' && method === 'GET') {
+      const params = new URLSearchParams(queryString || '');
+      const studentId = params.get('studentId') || '';
+      if (studentId) {
+        const fsRes = await firestoreStore.getStudentExams(studentId);
+        return (fsRes || { exams: [] }) as unknown as T;
+      }
+      return { exams: [] } as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.split('/').length === 3) {
+      const examId = cleanPath.replace('/exams/', '');
+      if (method === 'PUT') {
+        const fsRes = await firestoreStore.updateExam(examId, body);
+        if (fsRes) return fsRes as unknown as T;
+      }
+      if (method === 'DELETE') {
+        const fsRes = await firestoreStore.deleteExam(examId);
+        if (fsRes) return fsRes as unknown as T;
+      }
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/publish') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/publish', '');
+      const fsRes = await firestoreStore.togglePublishResults(examId);
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/token/regenerate') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/token/regenerate', '');
+      const fsRes = await firestoreStore.regenerateToken(examId);
+      if (fsRes) return fsRes as unknown as T;
+    }
+
+    if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/token/update-settings') && method === 'POST') {
+      const examId = cleanPath.replace('/exams/', '').replace('/token/update-settings', '');
+      const fsRes = await firestoreStore.updateTokenSettings(examId, body || {});
+      if (fsRes) return fsRes as unknown as T;
+    }
+
     if (cleanPath.startsWith('/exams/') && cleanPath.endsWith('/results') && method === 'GET') {
       const examId = cleanPath.replace('/exams/', '').replace('/results', '');
       const fsRes = await firestoreStore.getExamResults(examId);

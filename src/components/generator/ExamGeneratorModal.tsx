@@ -43,16 +43,21 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
   const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
 
+  const toLocalDateTimeInput = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   // Step 1: Identitas & Peserta
   const [title, setTitle] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [targetClassIds, setTargetClassIds] = useState<string[]>([]);
   const [durationMinutes, setDurationMinutes] = useState(90);
-  const [scheduleStart, setScheduleStart] = useState(
-    new Date().toISOString().slice(0, 16)
+  const [scheduleStart, setScheduleStart] = useState(() =>
+    toLocalDateTimeInput(new Date())
   );
-  const [scheduleEnd, setScheduleEnd] = useState(
-    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16)
+  const [scheduleEnd, setScheduleEnd] = useState(() =>
+    toLocalDateTimeInput(new Date(Date.now() + 7 * 86400000))
   );
 
   // Step 2: Bab & Kognitif
@@ -656,9 +661,41 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Pilih Kelas / Rombongan Belajar Peserta
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Pilih Kelas / Rombongan Belajar Peserta
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      Terpilih: {targetClassIds.length} dari {classes.length} kelas
+                      {targetClassIds.length > 0 && classes.length > 0 && (
+                        <span className="text-indigo-700 font-medium">
+                          {' '}
+                          ({classes
+                            .filter((c) => targetClassIds.includes(c.id))
+                            .map((c) => c.name)
+                            .join(', ')})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setTargetClassIds(classes.map((c) => c.id))}
+                      className="px-2 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors"
+                    >
+                      Pilih Semua Kelas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTargetClassIds([])}
+                      className="px-2 py-1 text-[11px] font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-md transition-colors"
+                    >
+                      Kosongkan
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {classes.map((cls) => {
                     const isSelected = targetClassIds.includes(cls.id);
@@ -1577,7 +1614,17 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                   <div>Nama Ujian: <strong className="text-slate-900">{title || 'Ujian Baru'}</strong></div>
                   <div>Mata Pelajaran: <strong className="text-slate-900">{subjects.find((s) => s.id === subjectId)?.name}</strong></div>
                   <div>Durasi: <strong className="text-slate-900">{durationMinutes} Menit</strong></div>
-                  <div>Jumlah Kelas Peserta: <strong className="text-slate-900">{targetClassIds.length} Rombel</strong></div>
+                  <div>
+                    Kelas Peserta:{' '}
+                    <strong className="text-slate-900">
+                      {targetClassIds.length} Rombel (
+                      {classes
+                        .filter((c) => targetClassIds.includes(c.id))
+                        .map((c) => c.name)
+                        .join(', ') || '-'}
+                      )
+                    </strong>
+                  </div>
                   <div>Total Soal per Siswa: <strong className="text-slate-900">{totalQuestions} Butir</strong></div>
                   <div>
                     Cakupan Materi:{' '}

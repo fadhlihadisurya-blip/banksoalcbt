@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
-import { Exam, Question } from '../../types/cbt';
+import { Exam, Question, ClassGroup } from '../../types/cbt';
 import {
   FileQuestion,
   Database,
@@ -12,6 +12,11 @@ import {
   Plus,
   ArrowRight,
   ShieldAlert,
+  Pencil,
+  CheckCircle2,
+  X,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { NavTab } from '../layout/AppLayout';
 
@@ -21,7 +26,15 @@ interface TeacherDashboardProps {
   onOpenTokenModal: (exam: Exam) => void;
   onSelectExamForMonitoring: (examId: string) => void;
   onSelectExamForAnalytics: (examId: string) => void;
+  refreshKey?: number;
 }
+
+const toLocalDateTimeInput = (isoOrDate: string | Date) => {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onNavigate,
@@ -29,28 +42,107 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onOpenTokenModal,
   onSelectExamForMonitoring,
   onSelectExamForAnalytics,
+  refreshKey = 0,
 }) => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Edit Exam (Target Classes & Schedule)
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editTargetClassIds, setEditTargetClassIds] = useState<string[]>([]);
+  const [editDurationMinutes, setEditDurationMinutes] = useState(90);
+  const [editKktpScore, setEditKktpScore] = useState(75);
+  const [editScheduleStart, setEditScheduleStart] = useState('');
+  const [editScheduleEnd, setEditScheduleEnd] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete Exam
+  const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
+  const [isDeletingExam, setIsDeletingExam] = useState(false);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [refreshKey]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [examsRes, questionsRes] = await Promise.all([
+      const [examsRes, questionsRes, classesRes] = await Promise.all([
         api.getExams(),
         api.getQuestions(),
+        api.getClasses().catch(() => ({ classes: [] })),
       ]);
       setExams(examsRes.exams || []);
       setQuestions(questionsRes.questions || []);
+      setClasses(classesRes.classes || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenEditExam = (exam: Exam) => {
+    setEditingExam(exam);
+    setEditTitle(exam.title || '');
+    setEditTargetClassIds(Array.isArray(exam.targetClassIds) ? [...exam.targetClassIds] : []);
+    setEditDurationMinutes(exam.durationMinutes || 90);
+    setEditKktpScore(exam.kktpScore || 75);
+    setEditScheduleStart(exam.scheduleStart ? toLocalDateTimeInput(exam.scheduleStart) : '');
+    setEditScheduleEnd(exam.scheduleEnd ? toLocalDateTimeInput(exam.scheduleEnd) : '');
+  };
+
+  const handleSaveEditExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExam) return;
+    if (!editTitle.trim()) {
+      alert('Nama ujian wajib diisi.');
+      return;
+    }
+    if (editTargetClassIds.length === 0) {
+      alert('Pilih minimal satu kelas peserta ujian.');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const payload: Partial<Exam> = {
+        title: editTitle.trim(),
+        targetClassIds: editTargetClassIds,
+        durationMinutes: Math.max(5, Number(editDurationMinutes) || 90),
+        kktpScore: Math.max(0, Number(editKktpScore) || 0),
+      };
+      if (editScheduleStart) {
+        payload.scheduleStart = new Date(editScheduleStart).toISOString();
+      }
+      if (editScheduleEnd) {
+        payload.scheduleEnd = new Date(editScheduleEnd).toISOString();
+      }
+
+      await api.updateExam(editingExam.id, payload);
+      setEditingExam(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Gagal memperbarui paket ujian.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteExam = async () => {
+    if (!deletingExam) return;
+    setIsDeletingExam(true);
+    try {
+      await api.deleteExam(deletingExam.id);
+      setDeletingExam(null);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus paket ujian.');
+    } finally {
+      setIsDeletingExam(false);
     }
   };
 
@@ -291,85 +383,308 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {exams.map((exam) => (
-                <tr key={exam.id} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="py-3.5 px-4">
-                    <div className="font-semibold text-slate-900">{exam.title}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      {exam.targetClassIds?.length || 0} Kelas Peserta · {exam.cognitiveTarget?.totalQuestions || 0} Soal
-                    </div>
-                  </td>
+              {exams.map((exam) => {
+                const targetNames = (exam.targetClassIds || [])
+                  .map((cid) => classes.find((c) => c.id === cid)?.name || cid)
+                  .filter(Boolean);
+                return (
+                  <tr key={exam.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-slate-900">{exam.title}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        {exam.targetClassIds?.length || 0} Kelas Peserta · {exam.cognitiveTarget?.totalQuestions || 0} Soal
+                      </div>
+                      {targetNames.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {targetNames.map((clsName, idx) => (
+                            <span
+                              key={`${exam.id}-cls-${idx}`}
+                              className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded"
+                            >
+                              {clsName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
 
-                  <td className="py-3.5 px-4 font-mono tabular-nums">
-                    <div>{exam.durationMinutes} Menit</div>
-                    <div className="text-[11px] text-slate-500">KKTP: {exam.kktpScore || 75}</div>
-                  </td>
+                    <td className="py-3.5 px-4 font-mono tabular-nums">
+                      <div>{exam.durationMinutes} Menit</div>
+                      <div className="text-[11px] text-slate-500">KKTP: {exam.kktpScore || 75}</div>
+                    </td>
 
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-slate-900 px-2 py-0.5 bg-slate-100 rounded text-xs">
-                        {exam.token}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-900 px-2 py-0.5 bg-slate-100 rounded text-xs">
+                          {exam.token}
+                        </span>
+                        <button
+                          onClick={() => onOpenTokenModal(exam)}
+                          className="p-1 text-slate-400 hover:text-slate-700"
+                          title="Atur Token"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="text-slate-700 flex items-center gap-1">
+                        <ShieldAlert className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Fullscreen + Tab Intercept</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <span className={`text-[11px] font-semibold ${exam.isPublishedResults ? 'text-emerald-700' : 'text-slate-500'}`}>
+                        {exam.isPublishedResults ? 'Hasil Dipublikasi' : 'Disembunyikan'}
                       </span>
-                      <button
-                        onClick={() => onOpenTokenModal(exam)}
-                        className="p-1 text-slate-400 hover:text-slate-700"
-                        title="Atur Token"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td className="py-3.5 px-4">
-                    <div className="text-slate-700 flex items-center gap-1">
-                      <ShieldAlert className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Fullscreen + Tab Intercept</span>
-                    </div>
-                  </td>
-
-                  <td className="py-3.5 px-4">
-                    <span className={`text-[11px] font-semibold ${exam.isPublishedResults ? 'text-emerald-700' : 'text-slate-500'}`}>
-                      {exam.isPublishedResults ? 'Hasil Dipublikasi' : 'Disembunyikan'}
-                    </span>
-                  </td>
-
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => {
-                          onSelectExamForMonitoring(exam.id);
-                          onNavigate('monitoring');
-                        }}
-                        className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded transition-colors"
-                      >
-                        Monitoring
-                      </button>
-                      <button
-                        onClick={() => {
-                          onSelectExamForAnalytics(exam.id);
-                          onNavigate('analytics');
-                        }}
-                        className="px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-colors"
-                      >
-                        AI Analytics
-                      </button>
-                      <button
-                        onClick={() => {
-                          onSelectExamForAnalytics(exam.id);
-                          onNavigate('results');
-                        }}
-                        className="px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors"
-                      >
-                        Nilai
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditExam(exam)}
+                          className="p-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                          title="Edit Paket Ujian (Kelas & Jadwal)"
+                          aria-label="Edit Paket Ujian"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            onSelectExamForMonitoring(exam.id);
+                            onNavigate('monitoring');
+                          }}
+                          className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                          title="Live Monitoring Ujian"
+                          aria-label="Monitoring Ujian"
+                        >
+                          <Activity className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            onSelectExamForAnalytics(exam.id);
+                            onNavigate('analytics');
+                          }}
+                          className="px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors inline-flex items-center gap-1"
+                          title="AI Analytics"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>AI Analytics</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            onSelectExamForAnalytics(exam.id);
+                            onNavigate('results');
+                          }}
+                          className="p-1.5 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                          title="Hasil & Nilai Ujian"
+                          aria-label="Nilai Ujian"
+                        >
+                          <Award className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeletingExam(exam)}
+                          className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
+                          title="Hapus Paket Ujian"
+                          aria-label="Hapus Paket Ujian"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Modal Edit Kelas & Jadwal Ujian */}
+      {editingExam && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveEditExam}
+            className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden"
+          >
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Edit Paket Ujian</h3>
+                <p className="text-[11px] text-slate-500">Atur kelas peserta agar ujian tampil di akun siswa yang sesuai</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingExam(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Nama Paket Ujian</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Durasi (Menit)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={240}
+                    value={editDurationMinutes}
+                    onChange={(e) => setEditDurationMinutes(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">KKTP</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={editKktpScore}
+                    onChange={(e) => setEditKktpScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Jadwal Mulai</label>
+                  <input
+                    type="datetime-local"
+                    value={editScheduleStart}
+                    onChange={(e) => setEditScheduleStart(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Jadwal Berakhir</label>
+                  <input
+                    type="datetime-local"
+                    value={editScheduleEnd}
+                    onChange={(e) => setEditScheduleEnd(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-semibold text-slate-700">
+                    Kelas / Rombel Peserta ({editTargetClassIds.length}/{classes.length})
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditTargetClassIds(classes.map((c) => c.id))}
+                      className="px-2 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200"
+                    >
+                      Pilih Semua Kelas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditTargetClassIds([])}
+                      className="px-2 py-1 text-[11px] font-semibold text-slate-600 bg-white hover:bg-slate-100 rounded border border-slate-200"
+                    >
+                      Kosongkan
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {classes.map((cls) => {
+                    const checked = editTargetClassIds.includes(cls.id);
+                    return (
+                      <button
+                        key={cls.id}
+                        type="button"
+                        onClick={() =>
+                          setEditTargetClassIds((prev) =>
+                            prev.includes(cls.id) ? prev.filter((id) => id !== cls.id) : [...prev, cls.id]
+                          )
+                        }
+                        className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-colors ${
+                          checked
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-900 font-semibold'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{cls.name}</span>
+                        {checked && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingExam(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={savingEdit}
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50"
+              >
+                {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {/* Modal Konfirmasi Hapus Paket Ujian */}
+      {deletingExam && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-slate-900">Hapus Paket Ujian?</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Paket ujian <strong className="text-slate-900">"{deletingExam.title}"</strong> beserta sesi dan hasil pengerjaannya akan dihapus secara permanen dari sistem.
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingExam(null)}
+                disabled={isDeletingExam}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteExam}
+                disabled={isDeletingExam}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50"
+              >
+                {isDeletingExam ? 'Menghapus...' : 'Ya, Hapus Ujian'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
