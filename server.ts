@@ -148,11 +148,34 @@ async function ensureFirestoreLoaded(forceRefresh = false) {
   }
 }
 
+function stripUndefinedDeep<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      return value;
+    }
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+      if (v !== undefined) {
+        result[k] = stripUndefinedDeep(v);
+      }
+    }
+    return result as T;
+  }
+  return value;
+}
+
 async function persistDocToFirestore(colName: string, docId: string, data: any) {
   if (!firestoreDb || !docId) return;
   pendingWrites++;
   try {
-    const clean = { ...data };
+    const clean = stripUndefinedDeep({ ...data });
     delete clean.passwordHash;
     await setDoc(doc(firestoreDb, colName, docId), clean, { merge: true });
     lastFirestoreSyncAt = Date.now();
@@ -1880,9 +1903,9 @@ app.post('/api/exams/:id/submit', async (req, res) => {
       questionId: q.id,
       number: q.number,
       cognitiveLevel: cogLevel,
-      subchapterId: master?.subchapterId,
-      competencyId: master?.competencyId,
-      studentAnswer: studentAns,
+      subchapterId: master?.subchapterId ?? null,
+      competencyId: master?.competencyId ?? null,
+      studentAnswer: studentAns ?? null,
       isCorrect,
       scoreEarned,
       maxPoints: points,
@@ -1900,10 +1923,10 @@ app.post('/api/exams/:id/submit', async (req, res) => {
     id: `res-${Date.now()}`,
     examId,
     studentId,
-    studentName: session.studentName,
-    studentNis: session.studentNis,
-    className: session.className,
-    completedAt: session.completedAt,
+    studentName: session.studentName || '',
+    studentNis: session.studentNis || '',
+    className: session.className || '',
+    completedAt: session.completedAt || new Date().toISOString(),
     finalScore,
     isPassed,
     kktpScore: exam.kktpScore || 75,

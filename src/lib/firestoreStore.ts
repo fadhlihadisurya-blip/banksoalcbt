@@ -23,6 +23,29 @@ import { isQuestionInExamScope, questionMatchesScopeUnit, evaluateScopeAvailabil
 
 class DomainValidationError extends Error {}
 
+function stripUndefinedDeep<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      return value;
+    }
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value as Record<string, any>)) {
+      if (v !== undefined) {
+        result[k] = stripUndefinedDeep(v);
+      }
+    }
+    return result as T;
+  }
+  return value;
+}
+
 const DEFAULT_ACADEMIC_YEARS = [
   { id: 'ay-2024-genap', name: '2024/2025', semester: 'Genap', isActive: true },
   { id: 'ay-2024-ganjil', name: '2024/2025', semester: 'Ganjil', isActive: false },
@@ -362,13 +385,13 @@ export const firestoreStore = {
       }
 
       const id = question.id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const newQ = {
+      const newQ = stripUndefinedDeep({
         ...question,
         id,
         code: finalCode,
         status: question.status || 'active',
         createdAt: new Date().toISOString(),
-      };
+      });
       await setDoc(doc(db, path, id), newQ);
       return { success: true, question: newQ };
     } catch (error) {
@@ -396,14 +419,14 @@ export const firestoreStore = {
             : generateNextQuestionCode(targetSubjectId, runningPool, subjects);
 
         const id = question.id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        const newQ = {
+        const newQ = stripUndefinedDeep({
           ...question,
           id,
           code: finalCode,
           subjectId: targetSubjectId,
           status: question.status || 'active',
           createdAt: new Date().toISOString(),
-        };
+        });
         await setDoc(doc(db, path, id), newQ);
         runningPool.push(newQ);
         count++;
@@ -451,11 +474,11 @@ export const firestoreStore = {
         nextCode = generateNextQuestionCode(nextSubjectId, existingQuestions, subjects, id);
       }
 
-      await updateDoc(ref, {
+      await updateDoc(ref, stripUndefinedDeep({
         ...question,
         code: nextCode,
         updatedAt: new Date().toISOString(),
-      });
+      }));
       const updatedSnap = await getDoc(ref);
       return { success: true, question: updatedSnap.data() };
     } catch (error) {
@@ -585,7 +608,7 @@ export const firestoreStore = {
         createdTeacherId: examData.createdTeacherId || examData.teacherId || '',
         createdAt: new Date().toISOString(),
       };
-      await setDoc(doc(db, path, id), newExam);
+      await setDoc(doc(db, path, id), stripUndefinedDeep(newExam));
       return { success: true, exam: newExam };
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
@@ -596,10 +619,10 @@ export const firestoreStore = {
     const path = `exams/${id}`;
     try {
       const ref = doc(db, 'exams', id);
-      await updateDoc(ref, {
+      await updateDoc(ref, stripUndefinedDeep({
         ...examData,
         updatedAt: new Date().toISOString(),
-      });
+      }));
       const updatedSnap = await getDoc(ref);
       return { success: true, exam: updatedSnap.data() };
     } catch (error) {
@@ -973,7 +996,7 @@ export const firestoreStore = {
           lastHeartbeat: new Date().toISOString(),
         };
 
-        await setDoc(doc(db, 'exam_sessions', sessionKey), session);
+        await setDoc(doc(db, 'exam_sessions', sessionKey), stripUndefinedDeep(session));
       } else {
         if (session.status === 'completed') {
           throw new DomainValidationError('Anda sudah menyelesaikan ujian ini.');
@@ -1049,13 +1072,13 @@ export const firestoreStore = {
           : session.remainingSeconds;
       const lastHeartbeat = new Date().toISOString();
 
-      await updateDoc(ref, {
+      await updateDoc(ref, stripUndefinedDeep({
         answers: nextAnswers,
         doubtfulFlags: nextFlags,
         currentQuestionIndex: nextIndex,
         remainingSeconds: nextRemaining,
         lastHeartbeat,
-      });
+      }));
 
       const answeredCount = Object.values(nextAnswers).filter(
         (v: any) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
@@ -1228,8 +1251,8 @@ export const firestoreStore = {
           questionId: qid,
           number: idx + 1,
           cognitiveLevel: cogLevel,
-          subchapterId: master?.subchapterId,
-          competencyId: master?.competencyId,
+          subchapterId: master?.subchapterId ?? null,
+          competencyId: master?.competencyId ?? null,
           studentAnswer: studentAns ?? null,
           isCorrect,
           scoreEarned,
@@ -1244,13 +1267,13 @@ export const firestoreStore = {
           : 0;
       const isPassed = finalScore >= (exam.kktpScore || 75);
 
-      const result = {
+      const result = stripUndefinedDeep({
         id: `res-${Date.now()}`,
         examId,
         studentId,
-        studentName: session.studentName,
-        studentNis: session.studentNis,
-        className: session.className,
+        studentName: session.studentName || '',
+        studentNis: session.studentNis || '',
+        className: session.className || '',
         completedAt,
         finalScore,
         isPassed,
@@ -1262,14 +1285,14 @@ export const firestoreStore = {
         breakdownByCognitive,
         questionDetails,
         violationsRecorded: session.violations || [],
-      };
+      });
 
       await Promise.all([
-        updateDoc(doc(db, 'exam_sessions', sessionKey), {
+        updateDoc(doc(db, 'exam_sessions', sessionKey), stripUndefinedDeep({
           answers: finalAnswers,
           status: 'completed',
           completedAt,
-        }),
+        })),
         setDoc(doc(db, 'exam_results', sessionKey), result),
       ]);
 
