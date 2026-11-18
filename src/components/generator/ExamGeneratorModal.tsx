@@ -110,9 +110,10 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
   } | null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const targetUnits: NodeCognitiveComposition[] = useMemo(() => {
-    const units: NodeCognitiveComposition[] = [];
+  const scopeUnits = useMemo(() => {
+    const units: Array<Omit<NodeCognitiveComposition, 'lotsCount' | 'motsCount' | 'hotsCount'>> = [];
     const subjChapters = chapters.filter(
       (c) => c.subjectId === subjectId && selectedChapterIds.includes(c.id)
     );
@@ -120,16 +121,11 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
     for (const ch of subjChapters) {
       const chSubchapters = subchapters.filter((sc) => sc.chapterId === ch.id);
       if (chSubchapters.length === 0) {
-        const key = `chapter:${ch.id}`;
-        const saved = nodeTargets[key] || { lotsCount: 1, motsCount: 1, hotsCount: 1 };
         units.push({
           scopeType: 'chapter',
           scopeId: ch.id,
           chapterId: ch.id,
           label: `Bab: ${ch.name}`,
-          lotsCount: saved.lotsCount,
-          motsCount: saved.motsCount,
-          hotsCount: saved.hotsCount,
         });
         continue;
       }
@@ -144,8 +140,6 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
             selectedCompetencyIds.includes(cmp.id)
           );
           for (const cmp of activeCompetencies) {
-            const key = `competency:${cmp.id}`;
-            const saved = nodeTargets[key] || { lotsCount: 1, motsCount: 1, hotsCount: 1 };
             units.push({
               scopeType: 'competency',
               scopeId: cmp.id,
@@ -153,23 +147,15 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
               subchapterId: sc.id,
               competencyId: cmp.id,
               label: `${ch.name} › ${sc.name} › ${cmp.code ? `[${cmp.code}] ` : ''}${cmp.description}`,
-              lotsCount: saved.lotsCount,
-              motsCount: saved.motsCount,
-              hotsCount: saved.hotsCount,
             });
           }
         } else {
-          const key = `subchapter:${sc.id}`;
-          const saved = nodeTargets[key] || { lotsCount: 1, motsCount: 1, hotsCount: 1 };
           units.push({
             scopeType: 'subchapter',
             scopeId: sc.id,
             chapterId: ch.id,
             subchapterId: sc.id,
             label: `${ch.name} › ${sc.name}`,
-            lotsCount: saved.lotsCount,
-            motsCount: saved.motsCount,
-            hotsCount: saved.hotsCount,
           });
         }
       }
@@ -184,8 +170,30 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
     selectedChapterIds,
     selectedSubchapterIds,
     selectedCompetencyIds,
-    nodeTargets,
   ]);
+
+  const targetUnits: NodeCognitiveComposition[] = useMemo(() => {
+    return scopeUnits.map((unit) => {
+      const key = `${unit.scopeType}:${unit.scopeId}`;
+      const saved = nodeTargets[key] || { lotsCount: 1, motsCount: 1, hotsCount: 1 };
+      const nodeVal = validation?.perScope?.[key];
+      const clampedLots = nodeVal
+        ? Math.min(Math.max(0, saved.lotsCount), Math.max(0, nodeVal.lots.available))
+        : Math.max(0, saved.lotsCount);
+      const clampedMots = nodeVal
+        ? Math.min(Math.max(0, saved.motsCount), Math.max(0, nodeVal.mots.available))
+        : Math.max(0, saved.motsCount);
+      const clampedHots = nodeVal
+        ? Math.min(Math.max(0, saved.hotsCount), Math.max(0, nodeVal.hots.available))
+        : Math.max(0, saved.hotsCount);
+      return {
+        ...unit,
+        lotsCount: clampedLots,
+        motsCount: clampedMots,
+        hotsCount: clampedHots,
+      };
+    });
+  }, [scopeUnits, nodeTargets, validation?.perScope]);
 
   const lotsCount = useMemo(
     () => targetUnits.reduce((sum, u) => sum + u.lotsCount, 0),
@@ -214,6 +222,7 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setStep(1);
+      setFormError(null);
       loadDependencies();
     }
   }, [isOpen]);
@@ -280,14 +289,29 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
     value: number
   ) => {
     const key = `${scopeType}:${scopeId}`;
-    const safeVal = Math.max(0, Number.isNaN(value) ? 0 : value);
+    const nodeVal = validation?.perScope?.[key];
+    const maxAllowed = nodeVal
+      ? field === 'lotsCount'
+        ? nodeVal.lots.available
+        : field === 'motsCount'
+        ? nodeVal.mots.available
+        : nodeVal.hots.available
+      : undefined;
+    const safeVal = Math.max(0, Math.floor(Number.isNaN(value) ? 0 : value));
+    const clampedVal =
+      typeof maxAllowed === 'number' ? Math.min(safeVal, Math.max(0, maxAllowed)) : safeVal;
+
     setNodeTargets((prev) => {
-      const current = prev[key] || { lotsCount: 1, motsCount: 1, hotsCount: 1 };
+      const current = prev[key] || {
+        lotsCount: nodeVal ? Math.min(1, Math.max(0, nodeVal.lots.available)) : 1,
+        motsCount: nodeVal ? Math.min(1, Math.max(0, nodeVal.mots.available)) : 1,
+        hotsCount: nodeVal ? Math.min(1, Math.max(0, nodeVal.hots.available)) : 1,
+      };
       return {
         ...prev,
         [key]: {
           ...current,
-          [field]: safeVal,
+          [field]: clampedVal,
         },
       };
     });
@@ -295,6 +319,7 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
 
   // Run availability validation against active bank questions
   const checkAvailability = async () => {
+    if (!subjectId) return;
     try {
       const res = await api.validateAvailability({
         subjectId,
@@ -315,10 +340,11 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
   };
 
   useEffect(() => {
-    if (subjectId && (step === 2 || step === 5)) {
+    if (isOpen && subjectId) {
       checkAvailability();
     }
   }, [
+    isOpen,
     subjectId,
     selectedChapterIds,
     selectedSubchapterIds,
@@ -326,6 +352,38 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
     targetUnits,
     step,
   ]);
+
+  // Ensure stored nodeTargets never exceed available questions when availability updates
+  useEffect(() => {
+    if (!validation?.perScope || scopeUnits.length === 0) return;
+    setNodeTargets((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const unit of scopeUnits) {
+        const key = `${unit.scopeType}:${unit.scopeId}`;
+        const nodeVal = validation.perScope?.[key];
+        if (!nodeVal) continue;
+        const cur = prev[key] || { lotsCount: 1, motsCount: 1, hotsCount: 1 };
+        const clampedLots = Math.min(Math.max(0, cur.lotsCount), Math.max(0, nodeVal.lots.available));
+        const clampedMots = Math.min(Math.max(0, cur.motsCount), Math.max(0, nodeVal.mots.available));
+        const clampedHots = Math.min(Math.max(0, cur.hotsCount), Math.max(0, nodeVal.hots.available));
+        if (
+          !prev[key] ||
+          clampedLots !== cur.lotsCount ||
+          clampedMots !== cur.motsCount ||
+          clampedHots !== cur.hotsCount
+        ) {
+          next[key] = {
+            lotsCount: clampedLots,
+            motsCount: clampedMots,
+            hotsCount: clampedHots,
+          };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [validation?.perScope, scopeUnits]);
 
   const toggleClassId = (id: string) => {
     setTargetClassIds((prev) =>
@@ -428,13 +486,14 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
   };
 
   const handleSaveExam = async () => {
+    setFormError(null);
     if (!title.trim()) {
-      alert('Nama / Judul ujian wajib diisi.');
+      setFormError('Nama / Judul ujian wajib diisi.');
       setStep(1);
       return;
     }
     if (targetClassIds.length === 0) {
-      alert('Pilih minimal satu kelas peserta ujian.');
+      setFormError('Pilih minimal satu kelas peserta ujian.');
       setStep(1);
       return;
     }
@@ -445,25 +504,40 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
       selectedSubchapterIds.length === 0 &&
       selectedCompetencyIds.length === 0
     ) {
-      alert('Pilih minimal satu cakupan materi (Bab / Sub Bab / Sub-Sub Bab).');
+      setFormError('Pilih minimal satu cakupan materi (Bab / Sub Bab / Sub-Sub Bab).');
       setStep(2);
       return;
     }
     if (totalQuestions <= 0) {
-      alert('Total soal minimal 1 butir.');
+      setFormError('Total soal minimal 1 butir. Pastikan ada soal aktif yang tersedia pada cakupan materi yang dipilih.');
       setStep(2);
       return;
     }
 
-    if (validation && !validation.isValid) {
-      const confirmProceed = confirm(
-        'PERINGATAN: Ketersediaan butir soal aktif pada bank soal kurang dari target yang ditentukan. Apakah Anda ingin melanjutkan?'
-      );
-      if (!confirmProceed) return;
-    }
-
     setSaving(true);
     try {
+      const latestValidation = await api.validateAvailability({
+        subjectId,
+        selectedChapterIds,
+        selectedSubchapterIds,
+        selectedCompetencyIds,
+        cognitiveTarget: {
+          lotsCount,
+          motsCount,
+          hotsCount,
+          perScopeTargets: targetUnits,
+        },
+      });
+      setValidation(latestValidation);
+
+      if (!latestValidation.isValid) {
+        setFormError(
+          'Jumlah soal LOTS, MOTS, atau HOTS yang ditentukan melebihi jumlah soal aktif yang tersedia di bank soal. Silakan sesuaikan kembali pada Langkah 2.'
+        );
+        setStep(2);
+        return;
+      }
+
       await api.createExam({
         title,
         subjectId,
@@ -509,7 +583,7 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
       onSuccess();
       onClose();
     } catch (err: any) {
-      alert(err.message || 'Gagal menyimpan ujian.');
+      setFormError(err.message || 'Gagal menyimpan ujian.');
     } finally {
       setSaving(false);
     }
@@ -584,6 +658,21 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
 
         {/* Modal Body / Steps */}
         <div className="flex-1 overflow-y-auto py-4 space-y-4">
+          {formError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{formError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormError(null)}
+                className="text-rose-500 hover:text-rose-700 p-0.5 shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {/* STEP 1: IDENTITAS & PESERTA */}
           {step === 1 && (
             <div className="space-y-4">
@@ -1023,16 +1112,19 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                               <input
                                 type="number"
                                 value={unit.lotsCount}
-                                onChange={(e) =>
-                                  updateNodeTarget(
-                                    unit.scopeType,
-                                    unit.scopeId,
-                                    'lotsCount',
-                                    Number(e.target.value)
-                                  )
-                                }
+                                onChange={(e) => {
+                                  const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                                  const maxAvail = nodeVal ? Math.max(0, nodeVal.lots.available) : undefined;
+                                  const next = typeof maxAvail === 'number' ? Math.min(raw, maxAvail) : raw;
+                                  if (typeof maxAvail === 'number' && raw > maxAvail) {
+                                    e.target.value = String(next);
+                                  }
+                                  updateNodeTarget(unit.scopeType, unit.scopeId, 'lotsCount', next);
+                                }}
                                 min={0}
-                                className={`w-full p-1.5 text-xs border rounded-lg font-mono font-bold bg-white ${
+                                max={nodeVal ? Math.max(0, nodeVal.lots.available) : undefined}
+                                disabled={nodeVal ? nodeVal.lots.available <= 0 : false}
+                                className={`w-full p-1.5 text-xs border rounded-lg font-mono font-bold bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
                                   nodeVal && !nodeVal.lots.sufficient
                                     ? 'border-amber-400 text-amber-800 bg-amber-50/40'
                                     : 'border-slate-300'
@@ -1041,12 +1133,14 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                               {nodeVal && (
                                 <span
                                   className={`text-[10px] mt-1 block ${
-                                    nodeVal.lots.sufficient
+                                    nodeVal.lots.available === 0
+                                      ? 'text-slate-400'
+                                      : nodeVal.lots.sufficient
                                       ? 'text-slate-500'
                                       : 'text-amber-700 font-semibold'
                                   }`}
                                 >
-                                  Tersedia: {nodeVal.lots.available}
+                                  Tersedia: {nodeVal.lots.available} (Maks: {nodeVal.lots.available})
                                 </span>
                               )}
                             </div>
@@ -1058,16 +1152,19 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                               <input
                                 type="number"
                                 value={unit.motsCount}
-                                onChange={(e) =>
-                                  updateNodeTarget(
-                                    unit.scopeType,
-                                    unit.scopeId,
-                                    'motsCount',
-                                    Number(e.target.value)
-                                  )
-                                }
+                                onChange={(e) => {
+                                  const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                                  const maxAvail = nodeVal ? Math.max(0, nodeVal.mots.available) : undefined;
+                                  const next = typeof maxAvail === 'number' ? Math.min(raw, maxAvail) : raw;
+                                  if (typeof maxAvail === 'number' && raw > maxAvail) {
+                                    e.target.value = String(next);
+                                  }
+                                  updateNodeTarget(unit.scopeType, unit.scopeId, 'motsCount', next);
+                                }}
                                 min={0}
-                                className={`w-full p-1.5 text-xs border rounded-lg font-mono font-bold bg-white ${
+                                max={nodeVal ? Math.max(0, nodeVal.mots.available) : undefined}
+                                disabled={nodeVal ? nodeVal.mots.available <= 0 : false}
+                                className={`w-full p-1.5 text-xs border rounded-lg font-mono font-bold bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
                                   nodeVal && !nodeVal.mots.sufficient
                                     ? 'border-amber-400 text-amber-800 bg-amber-50/40'
                                     : 'border-slate-300'
@@ -1076,12 +1173,14 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                               {nodeVal && (
                                 <span
                                   className={`text-[10px] mt-1 block ${
-                                    nodeVal.mots.sufficient
+                                    nodeVal.mots.available === 0
+                                      ? 'text-slate-400'
+                                      : nodeVal.mots.sufficient
                                       ? 'text-slate-500'
                                       : 'text-amber-700 font-semibold'
                                   }`}
                                 >
-                                  Tersedia: {nodeVal.mots.available}
+                                  Tersedia: {nodeVal.mots.available} (Maks: {nodeVal.mots.available})
                                 </span>
                               )}
                             </div>
@@ -1093,16 +1192,19 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                               <input
                                 type="number"
                                 value={unit.hotsCount}
-                                onChange={(e) =>
-                                  updateNodeTarget(
-                                    unit.scopeType,
-                                    unit.scopeId,
-                                    'hotsCount',
-                                    Number(e.target.value)
-                                  )
-                                }
+                                onChange={(e) => {
+                                  const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                                  const maxAvail = nodeVal ? Math.max(0, nodeVal.hots.available) : undefined;
+                                  const next = typeof maxAvail === 'number' ? Math.min(raw, maxAvail) : raw;
+                                  if (typeof maxAvail === 'number' && raw > maxAvail) {
+                                    e.target.value = String(next);
+                                  }
+                                  updateNodeTarget(unit.scopeType, unit.scopeId, 'hotsCount', next);
+                                }}
                                 min={0}
-                                className={`w-full p-1.5 text-xs border rounded-lg font-mono font-bold bg-white ${
+                                max={nodeVal ? Math.max(0, nodeVal.hots.available) : undefined}
+                                disabled={nodeVal ? nodeVal.hots.available <= 0 : false}
+                                className={`w-full p-1.5 text-xs border rounded-lg font-mono font-bold bg-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
                                   nodeVal && !nodeVal.hots.sufficient
                                     ? 'border-amber-400 text-amber-800 bg-amber-50/40'
                                     : 'border-slate-300'
@@ -1111,12 +1213,14 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
                               {nodeVal && (
                                 <span
                                   className={`text-[10px] mt-1 block ${
-                                    nodeVal.hots.sufficient
+                                    nodeVal.hots.available === 0
+                                      ? 'text-slate-400'
+                                      : nodeVal.hots.sufficient
                                       ? 'text-slate-500'
                                       : 'text-amber-700 font-semibold'
                                   }`}
                                 >
-                                  Tersedia: {nodeVal.hots.available}
+                                  Tersedia: {nodeVal.hots.available} (Maks: {nodeVal.hots.available})
                                 </span>
                               )}
                             </div>
@@ -1742,8 +1846,8 @@ export const ExamGeneratorModal: React.FC<ExamGeneratorModalProps> = ({
               <button
                 type="button"
                 onClick={handleSaveExam}
-                disabled={saving}
-                className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs transition-colors disabled:opacity-50"
+                disabled={saving || Boolean(validation && !validation.isValid)}
+                className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? 'Menyimpan & Mengacak...' : 'Simpan & Publikasikan Ujian'}
               </button>

@@ -1277,6 +1277,36 @@ app.post('/api/exams', async (req, res) => {
     return res.status(400).json({ error: 'Mohon lengkapi judul, mata pelajaran, dan kelas peserta.' });
   }
 
+  const effectiveCognitiveTarget = cognitiveTarget || {
+    lotsCount: 2,
+    motsCount: 3,
+    hotsCount: 2,
+    totalQuestions: 7,
+  };
+  const activePool = db.questions.filter((q: any) =>
+    isQuestionInExamScope(
+      q,
+      {
+        subjectId,
+        selectedChapterIds,
+        selectedSubchapterIds,
+        selectedCompetencyIds,
+      },
+      {
+        subchapters: db.subchapters,
+        competencies: db.competencies,
+      }
+    )
+  );
+  const availability = evaluateScopeAvailability(activePool, effectiveCognitiveTarget);
+  if (!availability.isValid) {
+    return res.status(400).json({
+      error:
+        'Jumlah penentuan soal LOTS, MOTS, atau HOTS tidak boleh melebihi jumlah soal aktif yang tersedia di bank soal.',
+      availability,
+    });
+  }
+
   // Generate initial token (e.g. 6 alphanumeric uppercase)
   const generatedToken = crypto.randomBytes(3).toString('hex').toUpperCase();
 

@@ -608,9 +608,42 @@ export const firestoreStore = {
         createdTeacherId: examData.createdTeacherId || examData.teacherId || '',
         createdAt: new Date().toISOString(),
       };
+      const [qSnap, taxSnap] = await Promise.all([
+        getDocs(collection(db, 'questions')),
+        getDocs(collection(db, 'taxonomy')),
+      ]);
+      const questions = qSnap.docs.map((d) => d.data());
+      const taxItems = taxSnap.docs.map((d) => d.data() as any);
+      const subchapters = taxItems
+        .filter((t) => t.type === 'subchapter')
+        .map((t) => ({ id: String(t.id || ''), chapterId: String(t.chapterId || '') }));
+      const competencies = taxItems
+        .filter((t) => t.type === 'competency')
+        .map((t) => ({ id: String(t.id || ''), subchapterId: String(t.subchapterId || '') }));
+
+      const activePool = questions.filter((q: any) =>
+        isQuestionInExamScope(
+          q,
+          {
+            subjectId: newExam.subjectId,
+            selectedChapterIds: newExam.selectedChapterIds,
+            selectedSubchapterIds: newExam.selectedSubchapterIds,
+            selectedCompetencyIds: newExam.selectedCompetencyIds,
+          },
+          { subchapters, competencies }
+        )
+      );
+      const availability = evaluateScopeAvailability(activePool, newExam.cognitiveTarget);
+      if (!availability.isValid) {
+        throw new DomainValidationError(
+          'Jumlah penentuan soal LOTS, MOTS, atau HOTS tidak boleh melebihi jumlah soal aktif yang tersedia di bank soal.'
+        );
+      }
+
       await setDoc(doc(db, path, id), stripUndefinedDeep(newExam));
       return { success: true, exam: newExam };
     } catch (error) {
+      if (error instanceof DomainValidationError) throw error;
       handleFirestoreError(error, OperationType.CREATE, path);
     }
   },
