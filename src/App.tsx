@@ -12,6 +12,7 @@ import { TokenManagerModal } from './components/token/TokenManagerModal';
 import { LiveMonitoringView } from './components/monitoring/LiveMonitoringView';
 import { ExamResultsView } from './components/results/ExamResultsView';
 import { AIAnalyticsView } from './components/analytics/AIAnalyticsView';
+import { AnbusoView } from './components/analytics/AnbusoView';
 import { ClassManagementView } from './components/admin/ClassManagementView';
 import { UserManagementView } from './components/admin/UserManagementView';
 import { TaxonomyManagementView } from './components/admin/TaxonomyManagementView';
@@ -164,6 +165,8 @@ function MainApp() {
               }}
             />
           );
+        case 'anbuso':
+          return <AnbusoView initialExamId={analyticsExamId || monitoringExamId} />;
         case 'analytics':
           return <AIAnalyticsView initialExamId={analyticsExamId} />;
         default:
@@ -228,6 +231,8 @@ function MainApp() {
               }}
             />
           );
+        case 'anbuso':
+          return <AnbusoView initialExamId={analyticsExamId || monitoringExamId} />;
         case 'analytics':
           return <AIAnalyticsView initialExamId={analyticsExamId} />;
         default:

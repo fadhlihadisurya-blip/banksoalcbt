@@ -1931,6 +1931,7 @@ app.post('/api/exams/:id/submit', async (req, res) => {
 
     return {
       questionId: q.id,
+      questionCode: master?.code || q.code || '',
       number: q.number,
       cognitiveLevel: cogLevel,
       subchapterId: master?.subchapterId ?? null,
@@ -2122,11 +2123,24 @@ app.get('/api/exams/:id/results', (req, res) => {
   const exam = db.exams.find((e: any) => e.id === examId);
   if (!exam) return res.status(404).json({ error: 'Ujian tidak ditemukan.' });
 
-  // Gather all results for this exam
+  // Gather all results for this exam and enrich questionDetails with questionCode
+  const questionCodeMap = new Map<string, string>(
+    (db.questions || []).map((q: any) => [String(q.id), String(q.code || '')])
+  );
   const results: any[] = [];
   Object.keys(db.examResults).forEach((key) => {
     if (key.startsWith(`${examId}_`)) {
-      results.push(db.examResults[key]);
+      const r = db.examResults[key];
+      const enrichedDetails = Array.isArray(r.questionDetails)
+        ? r.questionDetails.map((qd: any) => ({
+            ...qd,
+            questionCode: qd.questionCode || questionCodeMap.get(String(qd.questionId)) || qd.questionId || '-',
+          }))
+        : [];
+      results.push({
+        ...r,
+        questionDetails: enrichedDetails,
+      });
     }
   });
 

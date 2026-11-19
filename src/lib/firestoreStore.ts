@@ -1282,6 +1282,7 @@ export const firestoreStore = {
 
         return {
           questionId: qid,
+          questionCode: master?.code || '',
           number: idx + 1,
           cognitiveLevel: cogLevel,
           subchapterId: master?.subchapterId ?? null,
@@ -1511,12 +1512,30 @@ export const firestoreStore = {
   getExamResults: async (examId: string) => {
     const path = 'exam_results';
     try {
-      const [examSnap, resultsSnap] = await Promise.all([
+      const [examSnap, resultsSnap, questionsSnap] = await Promise.all([
         getDoc(doc(db, 'exams', examId)),
         getDocs(query(collection(db, path), where('examId', '==', examId))),
+        getDocs(collection(db, 'questions')),
       ]);
       const exam = examSnap.exists() ? examSnap.data() : null;
-      const results = resultsSnap.docs.map((d) => d.data());
+      const questionCodeMap = new Map<string, string>();
+      for (const qDoc of questionsSnap.docs) {
+        const qd = qDoc.data() as any;
+        questionCodeMap.set(String(qd.id || qDoc.id), String(qd.code || ''));
+      }
+      const results = resultsSnap.docs.map((d) => {
+        const r = d.data() as any;
+        const enrichedDetails = Array.isArray(r.questionDetails)
+          ? r.questionDetails.map((qd: any) => ({
+              ...qd,
+              questionCode: qd.questionCode || questionCodeMap.get(String(qd.questionId)) || qd.questionId || '-',
+            }))
+          : [];
+        return {
+          ...r,
+          questionDetails: enrichedDetails,
+        };
+      });
       const scores = results.map((r: any) => r.finalScore || 0);
       const highest = scores.length ? Math.max(...scores) : 0;
       const lowest = scores.length ? Math.min(...scores) : 0;

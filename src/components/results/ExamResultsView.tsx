@@ -13,6 +13,7 @@ import {
   Search,
   AlertCircle,
 } from 'lucide-react';
+import { downloadStyledXlsx, StyledCell } from '../../lib/excelExport';
 
 interface ExamResultsViewProps {
   initialExamId?: string;
@@ -135,33 +136,90 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
     }
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = async () => {
     if (!resultsData || resultsData.results.length === 0) {
       setErrorMessage('Tidak ada data hasil ujian untuk diekspor.');
       return;
     }
 
-    const headers = ['No', 'Nama Siswa', 'NIS', 'Kelas', 'Benar', 'Salah', 'Kosong', 'Nilai Akhir', 'Status KKTP'];
-    const rows = resultsData.results.map((r, i) => [
-      i + 1,
-      `"${r.studentName}"`,
-      r.studentNis,
-      `"${r.className}"`,
-      r.correctCount,
-      r.wrongCount,
-      r.emptyCount,
-      r.finalScore,
-      r.isPassed ? 'Tuntas' : 'Remedial',
-    ]);
+    try {
+      const maxQuestions = Math.max(
+        0,
+        ...resultsData.results.map((r) => {
+          const details = Array.isArray(r.questionDetails) ? r.questionDetails : [];
+          const maxNum = details.reduce(
+            (mx: number, qd: any) => Math.max(mx, Number(qd?.number) || 0),
+            0
+          );
+          return Math.max(Number(r.totalQuestions) || 0, details.length, maxNum);
+        })
+      );
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `rekap_nilai_${resultsData.exam.title.replace(/\s+/g, '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const questionHeaders: StyledCell[] = Array.from({ length: maxQuestions }, (_, idx) => ({
+        value: idx + 1,
+        style: 'header',
+      }));
+
+      const headerRow: StyledCell[] = [
+        { value: 'No', style: 'header' },
+        { value: 'NIS', style: 'header' },
+        { value: 'Kelas', style: 'header' },
+        { value: 'Nama Siswa', style: 'header' },
+        ...questionHeaders,
+        { value: 'Benar', style: 'header' },
+        { value: 'Salah', style: 'header' },
+        { value: 'Kosong', style: 'header' },
+        { value: 'Nilai Akhir', style: 'header' },
+        { value: 'Status KKTP', style: 'header' },
+      ];
+
+      const dataRows: StyledCell[][] = resultsData.results.map((r, i) => {
+        const details = Array.isArray(r.questionDetails) ? r.questionDetails : [];
+        const questionCells: StyledCell[] = Array.from({ length: maxQuestions }, (_, idx) => {
+          const qNum = idx + 1;
+          const qd =
+            details.find((item: any) => Number(item?.number) === qNum) || details[idx] || null;
+          const codeText = qd
+            ? String(qd.questionCode || qd.code || qd.questionId || '-')
+            : '-';
+
+          const ans = qd?.studentAnswer;
+          const isUnanswered =
+            ans === undefined ||
+            ans === null ||
+            ans === '' ||
+            (Array.isArray(ans) && ans.length === 0);
+          const isWrong = Boolean(qd) && !isUnanswered && !qd.pendingManualGrade && !qd.isCorrect;
+
+          return {
+            value: codeText,
+            style: isWrong ? 'wrong' : 'center',
+          };
+        });
+
+        return [
+          { value: i + 1, style: 'center' },
+          { value: r.studentNis || '-', style: 'center' },
+          { value: r.className || '-', style: 'default' },
+          { value: r.studentName || '-', style: 'default' },
+          ...questionCells,
+          { value: Number(r.correctCount) || 0, style: 'center' },
+          { value: Number(r.wrongCount) || 0, style: 'center' },
+          { value: Number(r.emptyCount) || 0, style: 'center' },
+          { value: Number(r.finalScore) || 0, style: 'center' },
+          { value: r.isPassed ? 'Tuntas' : 'Remedial', style: 'center' },
+        ];
+      });
+
+      await downloadStyledXlsx({
+        sheetName: 'Rekap Nilai',
+        fileName: `rekap_nilai_${resultsData.exam.title.replace(/\s+/g, '_')}.xlsx`,
+        rows: [headerRow, ...dataRows],
+      });
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err?.message || 'Gagal mengekspor data ke Excel.');
+    }
   };
 
   const handlePrint = () => {
@@ -435,11 +493,12 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
           )}
 
           <button
-            onClick={handleExportCSV}
+            onClick={handleExportExcel}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-xs transition-colors"
+            title="Ekspor rekap hasil ujian (.xlsx) dengan kode soal & tanda merah jawaban salah"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Ekspor CSV</span>
+            <span>Ekspor Excel (.xlsx)</span>
           </button>
 
           <button
