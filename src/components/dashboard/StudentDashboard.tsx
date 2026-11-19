@@ -71,14 +71,44 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
     }
   };
 
+  const triggerBrowserFullscreen = () => {
+    try {
+      const elem: any = document.documentElement;
+      if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+        if (elem.requestFullscreen) {
+          const p = elem.requestFullscreen();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        }
+      }
+    } catch {
+      // Ignore browser restrictions if fullscreen is disallowed
+    }
+  };
+
+  const exitBrowserFullscreenIfActive = () => {
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitFullscreenElement && (document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
   const handleOpenTokenDialog = async (exam: StudentExamInfo) => {
     setActionError('');
     if (exam.studentStatus === 'in_progress') {
+      triggerBrowserFullscreen();
       setStartingExamId(exam.id);
       try {
         // Direct resume without re-entering token
         await onStartExam(exam.id);
       } catch (err: any) {
+        exitBrowserFullscreenIfActive();
         setActionError(err?.message || 'Gagal melanjutkan sesi ujian.');
       } finally {
         setStartingExamId(null);
@@ -97,6 +127,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
       return;
     }
 
+    // Request fullscreen synchronously inside the click gesture before async API calls
+    triggerBrowserFullscreen();
     setSubmittingToken(true);
     setTokenError('');
     try {
@@ -104,6 +136,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
       await onStartExam(selectedExamForToken.id, inputToken.trim());
       setSelectedExamForToken(null);
     } catch (err: any) {
+      exitBrowserFullscreenIfActive();
       setTokenError(err?.message || 'Token tidak valid.');
     } finally {
       setSubmittingToken(false);

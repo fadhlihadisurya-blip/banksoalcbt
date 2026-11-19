@@ -83,7 +83,12 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     message: '',
   });
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() =>
+    Boolean(
+      typeof document !== 'undefined' &&
+        (document.fullscreenElement || (document as any).webkitFullscreenElement)
+    )
+  );
 
   // References to avoid stale closures in event listeners
   const remainingSecondsRef = useRef(remainingSeconds);
@@ -117,11 +122,19 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
   // Request fullscreen
   const enterFullscreen = () => {
     try {
-      const elem = document.documentElement;
+      const elem: any = document.documentElement;
       if (elem.requestFullscreen) {
-        elem.requestFullscreen();
+        const p = elem.requestFullscreen();
+        if (p && typeof p.then === 'function') {
+          p.then(() => setIsFullscreen(true)).catch(() => {
+            setIsFullscreen(Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement));
+          });
+          return;
+        }
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
       }
-      setIsFullscreen(true);
+      setIsFullscreen(Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement));
     } catch (e) {
       console.warn('Fullscreen request failed:', e);
     }
@@ -171,8 +184,13 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
       }
     };
 
+    const checkFullscreen = () =>
+      Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+
+    setIsFullscreen(checkFullscreen());
+
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
+      if (!checkFullscreen()) {
         setIsFullscreen(false);
         handleTriggerViolation('FULLSCREEN_EXIT', 'Siswa keluar dari mode fullscreen.');
       } else {
@@ -205,6 +223,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     window.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('copy', handleCopyPaste);
     window.addEventListener('paste', handleCopyPaste);
@@ -213,6 +232,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('copy', handleCopyPaste);
       window.removeEventListener('paste', handleCopyPaste);
@@ -323,6 +343,15 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
         origin: { y: 0.6 },
       });
       setShowSubmitModal(false);
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitFullscreenElement && (document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        }
+      } catch {
+        // Ignore
+      }
       onFinish();
     } catch (err: any) {
       setSubmitError(err?.message || 'Gagal menyerahkan ujian.');
