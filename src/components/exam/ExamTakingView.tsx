@@ -104,6 +104,16 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
 
+  useEffect(() => {
+    const nextAnswers = initialSession?.answers || {};
+    const nextFlags = initialSession?.doubtfulFlags || {};
+    answersRef.current = nextAnswers;
+    doubtfulFlagsRef.current = nextFlags;
+    setAnswers(nextAnswers);
+    setDoubtfulFlags(nextFlags);
+    setViolationCount(Number(initialSession?.violationCount) || 0);
+  }, [initialSession?.id]);
+
   // Request fullscreen
   const enterFullscreen = () => {
     try {
@@ -239,9 +249,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           remainingSeconds: remainingSecondsRef.current,
         });
         incrementStudentSave(user.id);
-        setAutosaveStatus('saved');
       } catch (err) {
         console.error('Autosave error:', err);
+      } finally {
+        setAutosaveStatus('saved');
       }
     }, 8000);
 
@@ -265,14 +276,16 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           remainingSeconds: remainingSecondsRef.current,
         });
         incrementStudentSave(user.id);
-        setAutosaveStatus('saved');
       } catch (err) {
         console.error(err);
+      } finally {
+        setAutosaveStatus('saved');
       }
     }
   };
 
   const handleToggleDoubtful = async (questionId: string) => {
+    if (!questionId) return;
     const nextValue = !doubtfulFlagsRef.current[questionId];
     const updated = { ...doubtfulFlagsRef.current, [questionId]: nextValue };
     doubtfulFlagsRef.current = updated;
@@ -288,9 +301,10 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
           remainingSeconds: remainingSecondsRef.current,
         });
         incrementStudentSave(user.id);
-        setAutosaveStatus('saved');
       } catch (err) {
         console.error(err);
+      } finally {
+        setAutosaveStatus('saved');
       }
     }
   };
@@ -488,7 +502,31 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                   </span>
                 )}
               </div>
-              <span className="font-mono text-slate-500">{currentQ.points} Poin</span>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={!!doubtfulFlags[currentQ.id]}
+                  onClick={() => handleToggleDoubtful(currentQ.id)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                    doubtfulFlags[currentQ.id]
+                      ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-xs'
+                      : 'bg-slate-800 border-amber-500/50 text-amber-300 hover:bg-slate-700 hover:border-amber-400'
+                  }`}
+                >
+                  <span
+                    className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center border ${
+                      doubtfulFlags[currentQ.id]
+                        ? 'bg-slate-950 border-slate-950 text-amber-400'
+                        : 'bg-slate-900 border-amber-400/70 text-transparent'
+                    }`}
+                  >
+                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                  </span>
+                  <span>Ragu-ragu</span>
+                </button>
+                <span className="font-mono text-slate-500">{currentQ.points} Poin</span>
+              </div>
             </div>
 
             {/* Question Text with formula & image styling */}
@@ -661,6 +699,66 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
             </div>
           </div>
 
+          {/* Bottom Action Strip */}
+          <div className="max-w-3xl mx-auto w-full pt-6 mt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentIndex((idx) => Math.max(0, idx - 1))}
+              disabled={currentIndex === 0}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-40 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Sebelumnya</span>
+            </button>
+
+            {/* Tombol Ceklist Penanda Ragu-ragu */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={!!doubtfulFlags[currentQ.id]}
+              onClick={() => handleToggleDoubtful(currentQ.id)}
+              className={`flex items-center gap-2.5 cursor-pointer px-4 py-2.5 rounded-xl border text-xs font-bold transition-all select-none ${
+                doubtfulFlags[currentQ.id]
+                  ? 'bg-amber-500 border-amber-400 text-slate-950 ring-2 ring-amber-400/50 shadow-sm'
+                  : 'bg-slate-800/90 border-amber-500/50 text-amber-300 hover:bg-slate-800 hover:border-amber-400'
+              }`}
+            >
+              <span
+                className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+                  doubtfulFlags[currentQ.id]
+                    ? 'bg-slate-950 border-slate-950 text-amber-400'
+                    : 'bg-slate-900 border-amber-500/70 text-transparent'
+                }`}
+              >
+                <Check className="w-3 h-3 stroke-[3]" />
+              </span>
+              <span>{doubtfulFlags[currentQ.id] ? 'Ditandai Ragu-ragu' : 'Ragu-ragu'}</span>
+            </button>
+
+            {currentIndex < safeQuestions.length - 1 ? (
+              <button
+                type="button"
+                onClick={() => setCurrentIndex((idx) => idx + 1)}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
+              >
+                <span>Berikutnya</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitError('');
+                  setShowSubmitModal(true);
+                }}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-lg shadow-emerald-900/40"
+              >
+                <Send className="w-4 h-4" />
+                <span>Kumpulkan Ujian</span>
+              </button>
+            )}
+          </div>
+
           {/* Mobile / Tablet Quick Question Grid */}
           <div className="lg:hidden max-w-3xl mx-auto w-full mt-5 pt-4 border-t border-slate-800/80 space-y-2">
             <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
@@ -690,75 +788,16 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                     key={q.id}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
-                    className={`w-8 h-8 rounded-lg border flex items-center justify-center font-mono text-[11px] transition-all ${btnClass}`}
+                    className={`relative w-8 h-8 rounded-lg border flex items-center justify-center font-mono text-[11px] transition-all ${btnClass}`}
                   >
                     {idx + 1}
+                    {isDoubt && isAnswered && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-900" />
+                    )}
                   </button>
                 );
               })}
             </div>
-          </div>
-
-          {/* Bottom Action Strip */}
-          <div className="max-w-3xl mx-auto w-full pt-6 mt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setCurrentIndex((idx) => Math.max(0, idx - 1))}
-              disabled={currentIndex === 0}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-40 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Sebelumnya</span>
-            </button>
-
-            {/* Ceklist Penanda Ragu-ragu */}
-            <label
-              className={`flex items-center gap-2.5 cursor-pointer px-4 py-2.5 rounded-xl border text-xs font-bold transition-all select-none ${
-                doubtfulFlags[currentQ.id]
-                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-sm'
-                  : 'bg-slate-800/90 border-amber-500/40 text-amber-300 hover:bg-slate-800 hover:border-amber-400'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={!!doubtfulFlags[currentQ.id]}
-                onChange={() => handleToggleDoubtful(currentQ.id)}
-                className="sr-only"
-              />
-              <span
-                className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
-                  doubtfulFlags[currentQ.id]
-                    ? 'bg-amber-500 border-amber-400 text-slate-950'
-                    : 'bg-slate-900 border-amber-500/60 text-transparent'
-                }`}
-              >
-                <Check className="w-3 h-3 stroke-[3]" />
-              </span>
-              <span>Ragu-ragu</span>
-            </label>
-
-            {currentIndex < safeQuestions.length - 1 ? (
-              <button
-                type="button"
-                onClick={() => setCurrentIndex((idx) => idx + 1)}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
-              >
-                <span>Berikutnya</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setSubmitError('');
-                  setShowSubmitModal(true);
-                }}
-                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-lg shadow-emerald-900/40"
-              >
-                <Send className="w-4 h-4" />
-                <span>Kumpulkan Ujian</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -794,9 +833,12 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                     key={q.id}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
-                    className={`h-11 rounded-lg border flex items-center justify-center font-mono text-xs transition-all ${btnClass}`}
+                    className={`relative h-11 rounded-lg border flex items-center justify-center font-mono text-xs transition-all ${btnClass}`}
                   >
                     {idx + 1}
+                    {isDoubt && isAnswered && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-slate-900" />
+                    )}
                   </button>
                 );
               })}

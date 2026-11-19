@@ -1700,8 +1700,57 @@ app.post('/api/exams/:id/start', async (req, res) => {
     return res.status(400).json({ error: 'Anda sudah menyelesaikan ujian ini.' });
   }
 
-  // Retrieve student's sanitized question package
-  const studentPackage = db.examPackages[sessionKey] || generateRandomizedStudentPackage(examId, studentId);
+  // Retrieve student's sanitized question package (preserve session.questionIds order if recovered after restart)
+  let studentPackage = db.examPackages[sessionKey];
+  if (!studentPackage && Array.isArray(session.questionIds) && session.questionIds.length > 0) {
+    const qMap = new Map<string, any>(db.questions.map((mq: any) => [mq.id, mq]));
+    const recoveredQuestions = session.questionIds
+      .map((qid: string, idx: number) => {
+        const q = qMap.get(qid);
+        if (!q) return null;
+        const cogLevel = q.cognitiveLevel || 'MOTS';
+        const configuredWeight = exam.scoringConfig?.weights?.[cogLevel];
+        const resolvedPoints =
+          typeof configuredWeight === 'number' && !Number.isNaN(configuredWeight) && configuredWeight >= 0
+            ? configuredWeight
+            : q.points || 10;
+        const maxSelectable =
+          q.type === 'pg_kompleks' && Array.isArray(q.correctAnswer)
+            ? q.correctAnswer.length
+            : undefined;
+        return {
+          number: idx + 1,
+          id: q.id,
+          subjectId: q.subjectId,
+          chapterId: q.chapterId,
+          subchapterId: q.subchapterId,
+          competencyId: q.competencyId,
+          cognitiveLevel: cogLevel,
+          type: q.type,
+          questionText: q.questionText,
+          options: Array.isArray(q.options)
+            ? q.options.map((opt: any) => ({ id: opt.id, text: opt.text }))
+            : undefined,
+          points: resolvedPoints,
+          ...(maxSelectable !== undefined ? { maxSelectable } : {}),
+        };
+      })
+      .filter(Boolean);
+
+    if (recoveredQuestions.length > 0) {
+      studentPackage = {
+        examId,
+        studentId,
+        createdAt: session.startedAt || new Date().toISOString(),
+        totalQuestions: recoveredQuestions.length,
+        questions: recoveredQuestions,
+      };
+      db.examPackages[sessionKey] = studentPackage;
+    }
+  }
+  if (!studentPackage) {
+    studentPackage = generateRandomizedStudentPackage(examId, studentId);
+  }
   const sanitizedQuestions = (studentPackage?.questions || []).map((pq: any) => {
     if (pq.type === 'pg_kompleks' && (typeof pq.maxSelectable !== 'number' || pq.maxSelectable <= 0)) {
       const masterQ = db.questions.find((mq: any) => mq.id === pq.id);
