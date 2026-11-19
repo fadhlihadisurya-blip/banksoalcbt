@@ -11,7 +11,6 @@ import { ExamGeneratorModal } from './components/generator/ExamGeneratorModal';
 import { TokenManagerModal } from './components/token/TokenManagerModal';
 import { LiveMonitoringView } from './components/monitoring/LiveMonitoringView';
 import { ExamResultsView } from './components/results/ExamResultsView';
-import { AIAnalyticsView } from './components/analytics/AIAnalyticsView';
 import { AnbusoView } from './components/analytics/AnbusoView';
 import { ClassManagementView } from './components/admin/ClassManagementView';
 import { UserManagementView } from './components/admin/UserManagementView';
@@ -39,8 +38,8 @@ function MainApp() {
   // Live Monitoring Selected Exam
   const [monitoringExamId, setMonitoringExamId] = useState<string>('');
 
-  // Analytics Selected Exam
-  const [analyticsExamId, setAnalyticsExamId] = useState<string>('');
+  // Selected Exam for Results / Anbuso
+  const [selectedExamId, setSelectedExamId] = useState<string>('');
 
   // Refresh key for TeacherDashboard exam list
   const [examListRefreshKey, setExamListRefreshKey] = useState(0);
@@ -142,9 +141,8 @@ function MainApp() {
                 setMonitoringExamId(id);
                 setCurrentTab('monitoring');
               }}
-              onSelectExamForAnalytics={(id) => {
-                setAnalyticsExamId(id);
-                setCurrentTab('analytics');
+              onSelectExamForResults={(id) => {
+                setSelectedExamId(id);
               }}
             />
           );
@@ -158,17 +156,11 @@ function MainApp() {
         case 'results':
           return (
             <ExamResultsView
-              initialExamId={analyticsExamId || monitoringExamId}
-              onOpenAnalytics={(id) => {
-                setAnalyticsExamId(id);
-                setCurrentTab('analytics');
-              }}
+              initialExamId={selectedExamId || monitoringExamId}
             />
           );
         case 'anbuso':
-          return <AnbusoView initialExamId={analyticsExamId || monitoringExamId} />;
-        case 'analytics':
-          return <AIAnalyticsView initialExamId={analyticsExamId} />;
+          return <AnbusoView initialExamId={selectedExamId || monitoringExamId} />;
         default:
           return <AdminDashboard onNavigate={(tab) => setCurrentTab(tab)} />;
       }
@@ -187,9 +179,8 @@ function MainApp() {
                 setMonitoringExamId(id);
                 setCurrentTab('monitoring');
               }}
-              onSelectExamForAnalytics={(id) => {
-                setAnalyticsExamId(id);
-                setCurrentTab('analytics');
+              onSelectExamForResults={(id) => {
+                setSelectedExamId(id);
               }}
             />
           );
@@ -208,9 +199,8 @@ function MainApp() {
                 setMonitoringExamId(id);
                 setCurrentTab('monitoring');
               }}
-              onSelectExamForAnalytics={(id) => {
-                setAnalyticsExamId(id);
-                setCurrentTab('analytics');
+              onSelectExamForResults={(id) => {
+                setSelectedExamId(id);
               }}
             />
           );
@@ -224,17 +214,11 @@ function MainApp() {
         case 'results':
           return (
             <ExamResultsView
-              initialExamId={analyticsExamId || monitoringExamId}
-              onOpenAnalytics={(id) => {
-                setAnalyticsExamId(id);
-                setCurrentTab('analytics');
-              }}
+              initialExamId={selectedExamId || monitoringExamId}
             />
           );
         case 'anbuso':
-          return <AnbusoView initialExamId={analyticsExamId || monitoringExamId} />;
-        case 'analytics':
-          return <AIAnalyticsView initialExamId={analyticsExamId} />;
+          return <AnbusoView initialExamId={selectedExamId || monitoringExamId} />;
         default:
           return (
             <TeacherDashboard
@@ -246,9 +230,8 @@ function MainApp() {
                 setMonitoringExamId(id);
                 setCurrentTab('monitoring');
               }}
-              onSelectExamForAnalytics={(id) => {
-                setAnalyticsExamId(id);
-                setCurrentTab('analytics');
+              onSelectExamForResults={(id) => {
+                setSelectedExamId(id);
               }}
             />
           );
@@ -260,15 +243,7 @@ function MainApp() {
       case 'dashboard':
         return <StudentDashboard onStartExam={handleStartExam} />;
       case 'results':
-        return (
-          <ExamResultsView
-            initialExamId=""
-            onOpenAnalytics={(id) => {
-              setAnalyticsExamId(id);
-              setCurrentTab('analytics');
-            }}
-          />
-        );
+        return <ExamResultsView initialExamId="" />;
       default:
         return <StudentDashboard onStartExam={handleStartExam} />;
     }

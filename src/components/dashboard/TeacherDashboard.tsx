@@ -17,6 +17,7 @@ import {
   X,
   Trash2,
   AlertTriangle,
+  ClipboardCheck,
 } from 'lucide-react';
 import { NavTab } from '../layout/AppLayout';
 
@@ -25,7 +26,7 @@ interface TeacherDashboardProps {
   onOpenExamGenerator: () => void;
   onOpenTokenModal: (exam: Exam) => void;
   onSelectExamForMonitoring: (examId: string) => void;
-  onSelectExamForAnalytics: (examId: string) => void;
+  onSelectExamForResults: (examId: string) => void;
   refreshKey?: number;
 }
 
@@ -41,7 +42,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onOpenExamGenerator,
   onOpenTokenModal,
   onSelectExamForMonitoring,
-  onSelectExamForAnalytics,
+  onSelectExamForResults,
   refreshKey = 0,
 }) => {
   const [exams, setExams] = useState<Exam[]>([]);
@@ -158,13 +159,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="max-w-xl">
           <div className="inline-flex items-center gap-2 text-indigo-300 text-xs font-semibold mb-2">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Pusat Asesmen Berbasis AI & Analisis Kognitif</span>
+            <span>Pusat Asesmen & Analisis Butir Soal</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
             Selamat Datang, Bapak/Ibu Guru
           </h2>
           <p className="mt-1 text-sm text-slate-300 leading-relaxed">
-            Kelola bank soal kurikulum SMA, buat paket ujian terandomisasi unik per siswa, awasi peserta dengan anti-curang, dan peroleh diagnosis belajar mendalam melalui AI Gemini.
+            Kelola bank soal kurikulum SMA, buat paket ujian terandomisasi unik per siswa, awasi peserta dengan anti-curang, dan evaluasi kualitas butir soal melalui Anbuso.
           </p>
         </div>
 
@@ -311,29 +312,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         </div>
 
-        {/* Card 3: AI Learning Analytics Shortcut */}
+        {/* Card 3: Anbuso Shortcut */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">Gemini AI Analytics</span>
-              <Sparkles className="w-4 h-4 text-purple-600" />
+              <span className="text-xs font-semibold text-slate-500">Analisis Butir Soal</span>
+              <ClipboardCheck className="w-4 h-4 text-indigo-600" />
             </div>
 
             <div className="mt-3">
-              <div className="text-sm font-bold text-slate-900">Diagnosis Kognitif & Rekomendasi</div>
+              <div className="text-sm font-bold text-slate-900">Evaluasi Kualitas Soal (Anbuso)</div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Analisis otomatis berbasis bukti: mengukur capaian tiap indikator kompetensi, mendeteksi miskonsepsi, dan merekomendasikan strategi remedial bagi guru.
+                Ukur kualitas setiap butir soal secara objektif berdasarkan jawaban peserta untuk perbaikan bank soal sekolah.
               </p>
             </div>
 
-            <div className="mt-4 p-3 bg-purple-50/60 border border-purple-100 rounded-lg text-xs space-y-1.5 text-purple-900">
+            <div className="mt-4 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs space-y-1.5 text-indigo-900">
               <div className="flex items-center gap-1.5 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-                <span>Analisis Klasikal per Rombel</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                <span>Difficulty, Discrimination & Distractor</span>
               </div>
               <div className="flex items-center gap-1.5 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-                <span>Rekomendasi Diferensiasi Belajar</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                <span>Reliabilitas & Decision Butir Soal</span>
               </div>
             </div>
           </div>
@@ -342,14 +343,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <button
               onClick={() => {
                 if (activeExams.length > 0) {
-                  onSelectExamForAnalytics(activeExams[0].id);
+                  onSelectExamForResults(activeExams[0].id);
                 }
-                onNavigate('analytics');
+                onNavigate('anbuso');
               }}
-              className="w-full py-2 px-3 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+              className="w-full py-2 px-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center justify-center gap-1.5"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Buka AI Learning Analytics</span>
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              <span>Buka Menu Anbuso</span>
             </button>
           </div>
         </div>
@@ -464,18 +465,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            onSelectExamForAnalytics(exam.id);
-                            onNavigate('analytics');
-                          }}
-                          className="px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors inline-flex items-center gap-1"
-                          title="AI Analytics"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>AI Analytics</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            onSelectExamForAnalytics(exam.id);
+                            onSelectExamForResults(exam.id);
                             onNavigate('results');
                           }}
                           className="p-1.5 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"

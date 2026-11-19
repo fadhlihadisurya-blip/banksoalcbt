@@ -9,7 +9,6 @@ import {
   KeyRound,
   Activity,
   Award,
-  Sparkles,
   Users,
   School,
   LogOut,
@@ -29,7 +28,6 @@ export type NavTab =
   | 'monitoring'
   | 'results'
   | 'anbuso'
-  | 'analytics'
   | 'classes'
   | 'users'
   | 'settings';
@@ -76,7 +74,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         { id: 'monitoring' as NavTab, label: 'Live Monitoring', icon: Activity },
         { id: 'results' as NavTab, label: 'Hasil & Penilaian', icon: Award },
         { id: 'anbuso' as NavTab, label: 'Anbuso', icon: ClipboardCheck },
-        { id: 'analytics' as NavTab, label: 'AI Learning Analytics', icon: Sparkles },
       ];
     }
 

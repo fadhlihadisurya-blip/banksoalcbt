@@ -250,7 +250,8 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
 
   // Handle immediate answer change
   const handleSelectAnswer = async (questionId: string, val: any) => {
-    const updated = { ...answers, [questionId]: val };
+    const updated = { ...answersRef.current, [questionId]: val };
+    answersRef.current = updated;
     setAnswers(updated);
 
     // Save immediately to backend
@@ -259,9 +260,9 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
       try {
         await api.autosaveExam(examId, user.id, {
           answers: updated,
-          doubtfulFlags,
-          currentQuestionIndex: currentIndex,
-          remainingSeconds,
+          doubtfulFlags: doubtfulFlagsRef.current,
+          currentQuestionIndex: currentIndexRef.current,
+          remainingSeconds: remainingSecondsRef.current,
         });
         incrementStudentSave(user.id);
         setAutosaveStatus('saved');
@@ -272,12 +273,20 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
   };
 
   const handleToggleDoubtful = async (questionId: string) => {
-    const updated = { ...doubtfulFlags, [questionId]: !doubtfulFlags[questionId] };
+    const nextValue = !doubtfulFlagsRef.current[questionId];
+    const updated = { ...doubtfulFlagsRef.current, [questionId]: nextValue };
+    doubtfulFlagsRef.current = updated;
     setDoubtfulFlags(updated);
+
     if (user?.id) {
       setAutosaveStatus('saving');
       try {
-        await api.autosaveExam(examId, user.id, { doubtfulFlags: updated });
+        await api.autosaveExam(examId, user.id, {
+          answers: answersRef.current,
+          doubtfulFlags: updated,
+          currentQuestionIndex: currentIndexRef.current,
+          remainingSeconds: remainingSecondsRef.current,
+        });
         incrementStudentSave(user.id);
         setAutosaveStatus('saved');
       } catch (err) {
@@ -344,8 +353,9 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
 
   const isUrgentTime = remainingSeconds < 300; // < 5 minutes
   const answeredCount = safeQuestions.filter((q) => hasAnswerValue(answers[q.id])).length;
-  const doubtfulCount = Object.values(doubtfulFlags).filter(Boolean).length;
+  const doubtfulCount = safeQuestions.filter((q) => !!doubtfulFlags[q.id]).length;
   const unansweredCount = safeQuestions.length - answeredCount;
+  const firstDoubtfulIndex = safeQuestions.findIndex((q) => !!doubtfulFlags[q.id]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col text-slate-100 select-none">
@@ -461,8 +471,8 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
         <div className="flex-1 flex flex-col justify-between overflow-y-auto bg-slate-900/80 p-4 sm:p-6 lg:p-8">
           <div className="max-w-3xl mx-auto w-full space-y-6">
             {/* Question Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs text-slate-400">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold text-base text-white font-mono">
                   Soal Nomor {currentIndex + 1}
                 </span>
@@ -471,6 +481,12 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                 <span className="font-semibold text-indigo-400 font-mono">
                   Level: {currentQ.cognitiveLevel}
                 </span>
+                {doubtfulFlags[currentQ.id] && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/50 text-amber-300 font-semibold text-[11px]">
+                    <HelpCircle className="w-3 h-3" />
+                    <span>Ditandai Ragu-ragu</span>
+                  </span>
+                )}
               </div>
               <span className="font-mono text-slate-500">{currentQ.points} Poin</span>
             </div>
@@ -645,9 +661,48 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
             </div>
           </div>
 
+          {/* Mobile / Tablet Quick Question Grid */}
+          <div className="lg:hidden max-w-3xl mx-auto w-full mt-5 pt-4 border-t border-slate-800/80 space-y-2">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span>Navigasi Soal</span>
+              <span>
+                {answeredCount}/{safeQuestions.length} Dijawab · {doubtfulCount} Ragu-ragu
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {safeQuestions.map((q, idx) => {
+                const isCurrent = idx === currentIndex;
+                const isAnswered = hasAnswerValue(answers[q.id]);
+                const isDoubt = !!doubtfulFlags[q.id];
+
+                let btnClass = 'bg-slate-800 text-slate-400 border-slate-700';
+                if (isDoubt) {
+                  btnClass = 'bg-amber-500 text-slate-950 border-amber-400 font-bold';
+                } else if (isAnswered) {
+                  btnClass = 'bg-emerald-600 text-white border-emerald-500 font-bold';
+                }
+                if (isCurrent) {
+                  btnClass += ' ring-2 ring-indigo-400 ring-offset-1 ring-offset-slate-900';
+                }
+
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`w-8 h-8 rounded-lg border flex items-center justify-center font-mono text-[11px] transition-all ${btnClass}`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Bottom Action Strip */}
-          <div className="max-w-3xl mx-auto w-full pt-6 mt-6 border-t border-slate-800 flex items-center justify-between">
+          <div className="max-w-3xl mx-auto w-full pt-6 mt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
             <button
+              type="button"
               onClick={() => setCurrentIndex((idx) => Math.max(0, idx - 1))}
               disabled={currentIndex === 0}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-40 transition-colors"
@@ -656,19 +711,35 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               <span>Sebelumnya</span>
             </button>
 
-            {/* Ragu-ragu checkbox */}
-            <label className="flex items-center gap-2 cursor-pointer bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700/80 text-xs font-semibold text-amber-400 hover:bg-slate-800 transition-colors">
+            {/* Ceklist Penanda Ragu-ragu */}
+            <label
+              className={`flex items-center gap-2.5 cursor-pointer px-4 py-2.5 rounded-xl border text-xs font-bold transition-all select-none ${
+                doubtfulFlags[currentQ.id]
+                  ? 'bg-amber-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-sm'
+                  : 'bg-slate-800/90 border-amber-500/40 text-amber-300 hover:bg-slate-800 hover:border-amber-400'
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={!!doubtfulFlags[currentQ.id]}
                 onChange={() => handleToggleDoubtful(currentQ.id)}
-                className="rounded border-amber-500 text-amber-500 focus:ring-amber-500"
+                className="sr-only"
               />
+              <span
+                className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+                  doubtfulFlags[currentQ.id]
+                    ? 'bg-amber-500 border-amber-400 text-slate-950'
+                    : 'bg-slate-900 border-amber-500/60 text-transparent'
+                }`}
+              >
+                <Check className="w-3 h-3 stroke-[3]" />
+              </span>
               <span>Ragu-ragu</span>
             </label>
 
             {currentIndex < safeQuestions.length - 1 ? (
               <button
+                type="button"
                 onClick={() => setCurrentIndex((idx) => idx + 1)}
                 className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors"
               >
@@ -677,6 +748,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               </button>
             ) : (
               <button
+                type="button"
                 onClick={() => {
                   setSubmitError('');
                   setShowSubmitModal(true);
@@ -708,7 +780,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                 let btnClass = 'bg-slate-800 text-slate-400 border-slate-700'; // unanswered default
 
                 if (isDoubt) {
-                  btnClass = 'bg-amber-600 text-white border-amber-500 font-bold';
+                  btnClass = 'bg-amber-500 text-slate-950 border-amber-400 font-bold';
                 } else if (isAnswered) {
                   btnClass = 'bg-emerald-600 text-white border-emerald-500 font-bold';
                 }
@@ -720,6 +792,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                 return (
                   <button
                     key={q.id}
+                    type="button"
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-11 rounded-lg border flex items-center justify-center font-mono text-xs transition-all ${btnClass}`}
                   >
@@ -735,9 +808,20 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                 <span className="w-3.5 h-3.5 rounded bg-emerald-600" />
                 <span>Sudah Dijawab ({answeredCount})</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-amber-600" />
-                <span>Ragu-ragu ({doubtfulCount})</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded bg-amber-500" />
+                  <span>Ragu-ragu ({doubtfulCount})</span>
+                </div>
+                {firstDoubtfulIndex >= 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentIndex(firstDoubtfulIndex)}
+                    className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 underline"
+                  >
+                    Lihat No. {firstDoubtfulIndex + 1}
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded bg-slate-800 border border-slate-700" />
@@ -809,7 +893,7 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
               </div>
             )}
 
-            <div className="bg-slate-800/80 border border-slate-700/80 p-4 rounded-xl space-y-2 text-xs mb-5">
+            <div className="bg-slate-800/80 border border-slate-700/80 p-4 rounded-xl space-y-2 text-xs mb-4">
               <div className="flex justify-between">
                 <span className="text-slate-400">Soal Terjawab:</span>
                 <span className="font-bold font-mono text-emerald-400">{answeredCount} butir</span>
@@ -823,6 +907,22 @@ export const ExamTakingView: React.FC<ExamTakingViewProps> = ({
                 <span className="font-bold font-mono text-rose-400">{unansweredCount} butir</span>
               </div>
             </div>
+
+            {firstDoubtfulIndex >= 0 && (
+              <div className="mb-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-xs text-amber-200 flex items-center justify-between gap-2">
+                <span>Masih ada {doubtfulCount} soal ditandai ragu-ragu.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSubmitModal(false);
+                    setCurrentIndex(firstDoubtfulIndex);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] shrink-0 transition-colors"
+                >
+                  Cek No. {firstDoubtfulIndex + 1}
+                </button>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2">
               <button

@@ -5,7 +5,6 @@ import { useSettings } from '../../context/SettingsContext';
 import { Exam, ExamResultItem, StudentResultItem, StudentResultsPayload } from '../../types/cbt';
 import { incrementStudentLoading } from '../../lib/studentActivityCounter';
 import {
-  Sparkles,
   Download,
   Printer,
   Eye,
@@ -17,12 +16,10 @@ import { downloadStyledXlsx, StyledCell } from '../../lib/excelExport';
 
 interface ExamResultsViewProps {
   initialExamId?: string;
-  onOpenAnalytics: (examId: string) => void;
 }
 
 export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
   initialExamId,
-  onOpenAnalytics,
 }) => {
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -507,14 +504,6 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Cetak Rekap</span>
-          </button>
-
-          <button
-            onClick={() => onOpenAnalytics(selectedExamId)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 rounded-lg shadow-xs transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Learning Analytics</span>
           </button>
         </div>
       </div>
