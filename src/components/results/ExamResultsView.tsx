@@ -330,8 +330,24 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
                         <td className="py-3 px-4 text-slate-500">{r.studentNis}</td>
                         <td className="py-3 px-4 font-sans text-slate-700">{r.className}</td>
                         <td className="py-3 px-4 font-sans font-medium text-slate-800">{r.examTitle}</td>
-                        <td className="py-3 px-4 text-center text-emerald-600 font-semibold">{r.correctCount}</td>
-                        <td className="py-3 px-4 text-center text-rose-500">{r.wrongCount}</td>
+                        <td className="py-3 px-4 text-center text-emerald-600 font-semibold">
+                          {isHidden || r.correctCount === null ? (
+                            <span className="text-slate-400 tracking-widest" title="Disembunyikan oleh Admin/Guru">
+                              ***
+                            </span>
+                          ) : (
+                            r.correctCount
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center text-rose-500">
+                          {isHidden || r.wrongCount === null ? (
+                            <span className="text-slate-400 tracking-widest" title="Disembunyikan oleh Admin/Guru">
+                              ***
+                            </span>
+                          ) : (
+                            r.wrongCount
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-center text-slate-400">{r.emptyCount}</td>
                         <td className="py-3 px-4 text-right text-base font-bold text-slate-900">
                           {isHidden ? (

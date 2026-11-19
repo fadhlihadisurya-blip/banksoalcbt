@@ -289,8 +289,8 @@ export interface StudentResultItem {
   studentNis: string;
   className: string;
   completedAt: string;
-  correctCount: number;
-  wrongCount: number;
+  correctCount: number | null;
+  wrongCount: number | null;
   emptyCount: number;
   totalQuestions: number;
   isPublishedResults: boolean;
