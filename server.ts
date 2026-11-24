@@ -31,6 +31,7 @@ import {
   computePointsPerCorrectForRemedial,
   computeRemedialFinalScore,
   computeRemedialDuration,
+  computeRemedialQuestionCount,
 } from './src/lib/remedialHelper';
 
 dotenv.config();
@@ -90,7 +91,8 @@ async function loadFromFirestore() {
       const resolvedPlain =
         typeof fsu.plainPassword === 'string' && fsu.plainPassword.trim().length > 0
           ? fsu.plainPassword.trim()
-          : !fsu.passwordCustom && (fsu.role === 'teacher' || fsu.role === 'student')
+          : !fsu.passwordCustom &&
+            (fsu.role === 'admin' || fsu.role === 'teacher' || fsu.role === 'student')
           ? roleDefaultPass
           : typeof existing?.plainPassword === 'string' && existing.plainPassword.trim().length > 0
           ? existing.plainPassword.trim()
@@ -103,7 +105,7 @@ async function loadFromFirestore() {
 
       const userId = fsu.id || d.id;
       const resolvedUsername = fsu.username || fsu.nis || fsu.nip || userId;
-      if (fsu.role === 'teacher' || fsu.role === 'student') {
+      if (fsu.role === 'admin' || fsu.role === 'teacher' || fsu.role === 'student') {
         const patch: Record<string, any> = {};
         if (!fsu.username && resolvedUsername) patch.username = resolvedUsername;
         if (!fsu.plainPassword && resolvedPlain) patch.plainPassword = resolvedPlain;
@@ -117,9 +119,7 @@ async function loadFromFirestore() {
         ...fsu,
         id: userId,
         username: resolvedUsername,
-        ...(resolvedPlain && (fsu.role === 'teacher' || fsu.role === 'student')
-          ? { plainPassword: resolvedPlain }
-          : {}),
+        ...(resolvedPlain ? { plainPassword: resolvedPlain } : {}),
         passwordHash: resolvedHash,
       };
     });
@@ -233,9 +233,6 @@ async function persistDocToFirestore(colName: string, docId: string, data: any) 
   pendingWrites++;
   try {
     const clean = stripUndefinedDeep({ ...data });
-    if (colName === 'users' && clean.role === 'admin') {
-      delete clean.passwordHash;
-    }
     await setDoc(doc(firestoreDb, colName, docId), clean, { merge: true });
     lastFirestoreSyncAt = Date.now();
   } catch (e) {
@@ -557,11 +554,14 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(403).json({ error: 'Akun Anda dinonaktifkan oleh Administrator. Hubungi pihak sekolah.' });
   }
 
-  // Update passwordHash & plainPassword so Firestore always retains teacher & student credentials
+  // Update passwordHash & plainPassword so Firestore always retains admin, teacher & student credentials
   if (user.passwordHash !== hash) {
     user.passwordHash = hash;
   }
-  if ((user.role === 'teacher' || user.role === 'student') && user.plainPassword !== cleanPassword) {
+  if (
+    (user.role === 'admin' || user.role === 'teacher' || user.role === 'student') &&
+    user.plainPassword !== cleanPassword
+  ) {
     user.plainPassword = cleanPassword;
   }
 
@@ -588,9 +588,6 @@ app.post('/api/auth/login', async (req, res) => {
 
   const userSafe = { ...user };
   delete userSafe.passwordHash;
-  if (userSafe.role === 'admin') {
-    delete userSafe.plainPassword;
-  }
 
   return res.json({ success: true, user: userSafe });
 });
@@ -615,17 +612,13 @@ app.post('/api/auth/change-password', async (req, res) => {
   const finalNew = String(newPassword).trim();
   user.passwordHash = hashPassword(finalNew);
   user.passwordCustom = true;
-  if (user.role === 'student' || user.role === 'teacher') {
-    user.plainPassword = finalNew;
-  }
+  user.plainPassword = finalNew;
   saveDatabase();
-  await persistDocToFirestore(
-    'users',
-    user.id,
-    user.role === 'student' || user.role === 'teacher'
-      ? { passwordCustom: true, plainPassword: finalNew, passwordHash: user.passwordHash }
-      : { passwordCustom: true }
-  );
+  await persistDocToFirestore('users', user.id, {
+    passwordCustom: true,
+    plainPassword: finalNew,
+    passwordHash: user.passwordHash,
+  });
 
   return res.json({ success: true, message: 'Password berhasil diperbarui.' });
 });
@@ -635,9 +628,6 @@ app.get('/api/admin/users', (req, res) => {
   const safeUsers = db.users.map((u: any) => {
     const copy = { ...u };
     delete copy.passwordHash;
-    if (copy.role === 'admin') {
-      delete copy.plainPassword;
-    }
     return copy;
   });
   res.json({ users: safeUsers });
@@ -660,6 +650,7 @@ app.post('/api/admin/users', async (req, res) => {
     id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     username: cleanUsername,
     passwordHash: hashPassword(cleanPassword),
+    plainPassword: cleanPassword,
     passwordCustom: true,
     name: String(name).trim(),
     role,
@@ -671,11 +662,9 @@ app.post('/api/admin/users', async (req, res) => {
   if (role === 'student') {
     newUser.nis = nis || cleanUsername;
     newUser.classId = classId || '';
-    newUser.plainPassword = cleanPassword;
   } else if (role === 'teacher') {
     newUser.nip = nip || '';
     newUser.subjectSpecialty = subjectSpecialty || '';
-    newUser.plainPassword = cleanPassword;
   }
 
   db.users.push(newUser);
@@ -684,9 +673,6 @@ app.post('/api/admin/users', async (req, res) => {
 
   const safe = { ...newUser };
   delete safe.passwordHash;
-  if (safe.role === 'admin') {
-    delete safe.plainPassword;
-  }
   res.json({ success: true, user: safe });
 });
 
@@ -721,9 +707,7 @@ app.put('/api/admin/users/:id', async (req, res) => {
     const cleanPassword = String(password).trim();
     user.passwordHash = hashPassword(cleanPassword);
     user.passwordCustom = true;
-    if (user.role === 'student' || user.role === 'teacher') {
-      user.plainPassword = cleanPassword;
-    }
+    user.plainPassword = cleanPassword;
   }
 
   user.updatedAt = new Date().toISOString();
@@ -732,9 +716,6 @@ app.put('/api/admin/users/:id', async (req, res) => {
 
   const safe = { ...user };
   delete safe.passwordHash;
-  if (safe.role === 'admin') {
-    delete safe.plainPassword;
-  }
   res.json({ success: true, user: safe, message: 'Data akun berhasil diperbarui.' });
 });
 
@@ -758,21 +739,17 @@ app.post('/api/admin/users/reset-password', async (req, res) => {
   const user = db.users.find((u: any) => u.id === userId);
   if (!user) return res.status(404).json({ error: 'User tidak ditemukan.' });
 
-  const defaultByRole = user.role === 'student' ? 'siswa123' : user.role === 'teacher' ? 'guru123' : 'sma12345';
+  const defaultByRole = user.role === 'student' ? 'siswa123' : user.role === 'teacher' ? 'guru123' : 'admin123';
   const finalPass = String(newPassword || defaultByRole).trim();
   user.passwordHash = hashPassword(finalPass);
   user.passwordCustom = true;
-  if (user.role === 'student' || user.role === 'teacher') {
-    user.plainPassword = finalPass;
-  }
+  user.plainPassword = finalPass;
   saveDatabase();
-  await persistDocToFirestore(
-    'users',
-    user.id,
-    user.role === 'student' || user.role === 'teacher'
-      ? { passwordCustom: true, plainPassword: finalPass, passwordHash: user.passwordHash }
-      : { passwordCustom: true }
-  );
+  await persistDocToFirestore('users', user.id, {
+    passwordCustom: true,
+    plainPassword: finalPass,
+    passwordHash: user.passwordHash,
+  });
   res.json({ success: true, message: 'Password berhasil direset.' });
 });
 
@@ -3040,14 +3017,26 @@ app.post('/api/remedial/generate', async (req, res) => {
       });
     }
     const nextAttemptCount = isReschedule ? (Number(existing?.attemptCount) || 1) + 1 : 1;
+    const baseScore = Number(r.finalScore) || 0;
+    const wrongQuestions = extractWrongQuestionDetails(r, db.questions || []);
+    const originalTotalQuestions =
+      Number(r.totalQuestions) ||
+      (Array.isArray(r.questionDetails) ? r.questionDetails.length : 0) ||
+      Number(exam.cognitiveTarget?.totalQuestions) ||
+      Math.max(1, wrongQuestions.length);
+    const neededQuestionCount = computeRemedialQuestionCount({
+      baseScore,
+      kktpScore,
+      maxScore,
+      originalTotalQuestions,
+    });
     const requiredCount =
       isReschedule && Array.isArray(existing?.questionIds) && existing.questionIds.length > 0
         ? existing.questionIds.length
-        : undefined;
+        : neededQuestionCount;
     const previousQuestionIds =
       isReschedule && Array.isArray(existing?.questionIds) ? existing.questionIds : undefined;
 
-    const wrongQuestions = extractWrongQuestionDetails(r, db.questions || []);
     const { questionIds, fallbackUsedCount } = selectRemedialQuestions({
       mode,
       wrongQuestions,
@@ -3060,12 +3049,6 @@ app.post('/api/remedial/generate', async (req, res) => {
 
     if (questionIds.length === 0) continue;
 
-    const baseScore = Number(r.finalScore) || 0;
-    const originalTotalQuestions =
-      Number(r.totalQuestions) ||
-      (Array.isArray(r.questionDetails) ? r.questionDetails.length : 0) ||
-      Number(exam.cognitiveTarget?.totalQuestions) ||
-      questionIds.length;
     const pointsPerCorrect = computePointsPerCorrectForRemedial({
       baseScore,
       kktpScore,

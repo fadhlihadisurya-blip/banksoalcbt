@@ -249,8 +249,8 @@ export const clientStore = {
         throw new Error('Akun Anda dinonaktifkan oleh Administrator. Hubungi pihak sekolah.');
       }
 
-      // Persist missing credentials & lastLogin to Firestore for teachers & students
-      if (match.role === 'teacher' || match.role === 'student') {
+      // Persist missing credentials & lastLogin to Firestore for admins, teachers & students
+      if (match.role === 'admin' || match.role === 'teacher' || match.role === 'student') {
         await firestoreStore.updateUser(match.id, {
           password: cleanPass,
           lastLogin: new Date().toISOString(),
@@ -271,7 +271,6 @@ export const clientStore = {
 
       const safeMatch = { ...match };
       delete safeMatch.passwordHash;
-      if (safeMatch.role === 'admin') delete safeMatch.plainPassword;
       return { success: true, user: safeMatch } as T;
     }
 

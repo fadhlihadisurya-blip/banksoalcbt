@@ -412,9 +412,8 @@ export const UserManagementView: React.FC = () => {
                   const studentClass = classes.find((c) => c.id === u.classId);
                   const isRevealed = Boolean(revealedPasswords[u.id]);
                   const storedPassword =
-                    u.role !== 'admin'
-                      ? u.plainPassword || (u.role === 'teacher' ? 'guru123' : 'siswa123')
-                      : '';
+                    u.plainPassword ||
+                    (u.role === 'admin' ? 'admin123' : u.role === 'teacher' ? 'guru123' : 'siswa123');
 
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
@@ -430,28 +429,24 @@ export const UserManagementView: React.FC = () => {
                       </td>
 
                       <td className="py-3 px-4 font-mono">
-                        {u.role === 'admin' ? (
-                          <span className="text-[11px] text-slate-400">•••••••• (Terenkripsi)</span>
-                        ) : (
-                          <div className="inline-flex items-center gap-1.5">
-                            <span className="text-slate-700 font-semibold">
-                              {isRevealed ? storedPassword : '••••••••'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setRevealedPasswords((prev) => ({
-                                  ...prev,
-                                  [u.id]: !prev[u.id],
-                                }))
-                              }
-                              className="p-1 text-slate-400 hover:text-indigo-600 rounded transition-colors"
-                              title={isRevealed ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
-                            >
-                              {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        )}
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="text-slate-700 font-semibold">
+                            {isRevealed ? storedPassword : '••••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRevealedPasswords((prev) => ({
+                                ...prev,
+                                [u.id]: !prev[u.id],
+                              }))
+                            }
+                            className="p-1 text-slate-400 hover:text-indigo-600 rounded transition-colors"
+                            title={isRevealed ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                          >
+                            {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </td>
 
                       <td className="py-3 px-4">

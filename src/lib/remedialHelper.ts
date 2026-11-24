@@ -78,9 +78,10 @@ export function selectRemedialQuestions(params: {
         });
 
   const enforceExactCount = (ids: string[]) => {
-    if (!requiredCount || requiredCount <= 0) return ids;
-    const out = [...ids];
-    if (out.length > requiredCount) return out.slice(0, requiredCount);
+    const uniqueIds = Array.from(new Set(ids));
+    if (!requiredCount || requiredCount <= 0) return uniqueIds;
+    if (uniqueIds.length > requiredCount) return uniqueIds.slice(0, requiredCount);
+    const out = [...uniqueIds];
     const padPool = [
       ...(previousQuestionIds || []),
       ...targetItems.map((item) => item.questionId),
@@ -89,31 +90,42 @@ export function selectRemedialQuestions(params: {
       if (out.length >= requiredCount) break;
       if (!out.includes(qid)) out.push(qid);
     }
-    let idx = 0;
-    while (out.length < requiredCount && padPool.length > 0) {
-      out.push(padPool[idx % padPool.length]);
-      idx++;
-    }
     return out;
   };
 
+  const effectiveTargetCount =
+    requiredCount && requiredCount > 0 ? requiredCount : targetItems.length;
+
+  const freshWrongItems = targetItems.filter((item) => !previousSet.has(item.questionId));
+  const reusedWrongItems = targetItems.filter((item) => previousSet.has(item.questionId));
+  const orderedWrongPool = [...shuffleArray(freshWrongItems), ...shuffleArray(reusedWrongItems)];
+
   if (mode === 'same_wrong') {
-    const validIds = targetItems
+    const validIds = orderedWrongPool
       .map((item) => item.questionId)
       .filter((qid) => allQuestionMap.has(qid));
     return {
-      questionIds: enforceExactCount(validIds),
+      questionIds: enforceExactCount(validIds.slice(0, effectiveTargetCount)),
       fallbackUsedCount: 0,
     };
   }
 
   // Mode: 'random_same_competency'
-  // For each wrong item, pick 1 random active question from the exact same sub-sub-bab (competencyId)
+  // Pick `effectiveTargetCount` random active questions matching the wrong items' sub-sub-bab (competencyId)
+  const loopItems: RemedialWrongQuestionMeta[] = orderedWrongPool.slice(0, effectiveTargetCount);
+  if (orderedWrongPool.length > 0 && loopItems.length < effectiveTargetCount) {
+    let idx = 0;
+    while (loopItems.length < effectiveTargetCount) {
+      loopItems.push(orderedWrongPool[idx % orderedWrongPool.length]);
+      idx++;
+    }
+  }
+
   const pickedIds: string[] = [];
   const pickedSet = new Set<string>();
   let fallbackUsedCount = 0;
 
-  for (const wrongItem of targetItems) {
+  for (const wrongItem of loopItems) {
     const master = allQuestionMap.get(wrongItem.questionId);
     const compId = wrongItem.competencyId || master?.competencyId || null;
     const subId = wrongItem.subchapterId || master?.subchapterId || null;
@@ -174,8 +186,9 @@ export function selectRemedialQuestions(params: {
       const chosen = shuffleArray(candidates)[0];
       pickedIds.push(String(chosen.id));
       pickedSet.add(String(chosen.id));
-    } else if (allQuestionMap.has(wrongItem.questionId)) {
+    } else if (allQuestionMap.has(wrongItem.questionId) && !pickedSet.has(wrongItem.questionId)) {
       pickedIds.push(wrongItem.questionId);
+      pickedSet.add(wrongItem.questionId);
       fallbackUsedCount += 1;
     }
   }
@@ -256,4 +269,24 @@ export function computeRemedialDuration(params: {
     durationSeconds,
   };
 }
+
+export function computeRemedialQuestionCount(params: {
+  baseScore: number;
+  kktpScore: number;
+  maxScore: number;
+  originalTotalQuestions: number;
+}): number {
+  const maxScore = Math.max(1, Number(params.maxScore) || 100);
+  const kktpScore = Number(params.kktpScore) || 75;
+  const baseScore = Number(params.baseScore) || 0;
+  const totalOrig = Math.max(1, Number(params.originalTotalQuestions) || 1);
+
+  const scoreShortfall = Math.max(0, kktpScore - baseScore);
+  if (scoreShortfall <= 0) return 0;
+
+  const pointsPerOriginalQuestion = maxScore / totalOrig;
+  const rawNeeded = scoreShortfall / pointsPerOriginalQuestion;
+  return Math.max(1, Math.ceil(Number(rawNeeded.toFixed(6))));
+}
+
 

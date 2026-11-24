@@ -27,6 +27,7 @@ import {
   computePointsPerCorrectForRemedial,
   computeRemedialFinalScore,
   computeRemedialDuration,
+  computeRemedialQuestionCount,
 } from './remedialHelper';
 
 class DomainValidationError extends Error {}
@@ -246,9 +247,6 @@ export const firestoreStore = {
       const users = snap.docs.map((d) => {
         const u = { id: d.id, ...d.data() } as any;
         delete u.passwordHash;
-        if (u.role === 'admin') {
-          delete u.plainPassword;
-        }
         return u;
       });
       return { users };
@@ -285,17 +283,16 @@ export const firestoreStore = {
         email: userData.email || '',
         isActive: userData.isActive !== false,
         passwordCustom: Boolean(userData.password),
+        plainPassword: rawPassword,
         ...(passwordHash ? { passwordHash } : {}),
         createdAt: new Date().toISOString(),
       };
       if (role === 'student') {
         newUser.nis = userData.nis || newUser.username;
         newUser.classId = userData.classId || '';
-        newUser.plainPassword = rawPassword;
       } else if (role === 'teacher') {
         newUser.nip = userData.nip || '';
         newUser.subjectSpecialty = userData.subjectSpecialty || '';
-        newUser.plainPassword = rawPassword;
       }
       await setDoc(doc(db, path, id), stripUndefinedDeep(newUser));
       const safe = { ...newUser };
@@ -310,8 +307,6 @@ export const firestoreStore = {
     const path = `users/${id}`;
     try {
       const ref = doc(db, 'users', id);
-      const curSnap = await getDoc(ref);
-      const currentRole = userData.role || curSnap.data()?.role;
       const updatePayload: any = {};
       if (userData.name !== undefined) updatePayload.name = userData.name.trim();
       if (userData.username !== undefined) updatePayload.username = userData.username.trim();
@@ -328,9 +323,7 @@ export const firestoreStore = {
         const passwordHash = await hashPasswordAsync(cleanPass);
         updatePayload.passwordCustom = true;
         if (passwordHash) updatePayload.passwordHash = passwordHash;
-        if (currentRole === 'student' || currentRole === 'teacher') {
-          updatePayload.plainPassword = cleanPass;
-        }
+        updatePayload.plainPassword = cleanPass;
       }
       updatePayload.updatedAt = new Date().toISOString();
 
@@ -338,9 +331,6 @@ export const firestoreStore = {
       const updatedSnap = await getDoc(ref);
       const safe = updatedSnap.data() || {};
       delete safe.passwordHash;
-      if (safe.role === 'admin') {
-        delete safe.plainPassword;
-      }
       return { success: true, user: safe, message: 'Data pengguna tersimpan di Firestore.' };
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
@@ -2451,14 +2441,26 @@ export const firestoreStore = {
           });
         }
         const nextAttemptCount = isReschedule ? (Number(existing?.attemptCount) || 1) + 1 : 1;
+        const baseScore = Number(r.finalScore) || 0;
+        const wrongQuestions = extractWrongQuestionDetails(r, allQuestions);
+        const originalTotalQuestions =
+          Number(r.totalQuestions) ||
+          (Array.isArray(r.questionDetails) ? r.questionDetails.length : 0) ||
+          Number(exam.cognitiveTarget?.totalQuestions) ||
+          Math.max(1, wrongQuestions.length);
+        const neededQuestionCount = computeRemedialQuestionCount({
+          baseScore,
+          kktpScore,
+          maxScore,
+          originalTotalQuestions,
+        });
         const requiredCount =
           isReschedule && Array.isArray(existing?.questionIds) && existing.questionIds.length > 0
             ? existing.questionIds.length
-            : undefined;
+            : neededQuestionCount;
         const previousQuestionIds =
           isReschedule && Array.isArray(existing?.questionIds) ? existing.questionIds : undefined;
 
-        const wrongQuestions = extractWrongQuestionDetails(r, allQuestions);
         const { questionIds, fallbackUsedCount } = selectRemedialQuestions({
           mode,
           wrongQuestions,
@@ -2471,12 +2473,6 @@ export const firestoreStore = {
 
         if (questionIds.length === 0) continue;
 
-        const baseScore = Number(r.finalScore) || 0;
-        const originalTotalQuestions =
-          Number(r.totalQuestions) ||
-          (Array.isArray(r.questionDetails) ? r.questionDetails.length : 0) ||
-          Number(exam.cognitiveTarget?.totalQuestions) ||
-          questionIds.length;
         const pointsPerCorrect = computePointsPerCorrectForRemedial({
           baseScore,
           kktpScore,

@@ -6,7 +6,7 @@ import {
   RemedialOverviewPayload,
   RemedialExamStudentRow,
 } from '../../types/cbt';
-import { computeRemedialDuration } from '../../lib/remedialHelper';
+import { computeRemedialDuration, computeRemedialQuestionCount } from '../../lib/remedialHelper';
 import {
   RotateCcw,
   Sparkles,
@@ -488,6 +488,19 @@ export const RemedialView: React.FC<RemedialViewProps> = ({ initialExamId }) => 
                         <div className="font-mono font-semibold text-slate-700">
                           {wrongAndEmpty} / {s.totalQuestions} soal
                         </div>
+                        {!s.isPassedOriginal && data?.selectedExam && (
+                          <div className="text-[10px] font-semibold text-indigo-700 mt-0.5">
+                            Target ke KKM:{' '}
+                            {s.remedial?.questionIds?.length ||
+                              computeRemedialQuestionCount({
+                                baseScore: s.originalScore,
+                                kktpScore: s.kktpScore,
+                                maxScore: data.selectedExam.maxScore || 100,
+                                originalTotalQuestions: s.totalQuestions,
+                              })}{' '}
+                            soal
+                          </div>
+                        )}
                         {!s.isPassedOriginal && s.wrongCompetencyCodes && s.wrongCompetencyCodes.length > 0 && (
                           <div
                             className="text-[10px] text-slate-500 truncate max-w-[180px] mx-auto"
@@ -728,11 +741,17 @@ export const RemedialView: React.FC<RemedialViewProps> = ({ initialExamId }) => 
                     ? schedulableStudents.filter((s) => selectedStudentIds.includes(s.studentId))
                     : schedulableStudents;
                   const durations = targetStudents.map((s) => {
+                    const totalQ = Math.max(1, s.totalQuestions || 1);
                     const remCount = Math.max(
                       1,
-                      s.remedial?.questionIds?.length || s.wrongCount + s.emptyCount || 1
+                      s.remedial?.questionIds?.length ||
+                        computeRemedialQuestionCount({
+                          baseScore: s.originalScore,
+                          kktpScore: s.kktpScore,
+                          maxScore: data.selectedExam!.maxScore || 100,
+                          originalTotalQuestions: totalQ,
+                        })
                     );
-                    const totalQ = Math.max(1, s.totalQuestions || remCount);
                     return computeRemedialDuration({
                       examDurationMinutes: data.selectedExam!.durationMinutes,
                       examTotalQuestions: totalQ,
@@ -753,9 +772,9 @@ export const RemedialView: React.FC<RemedialViewProps> = ({ initialExamId }) => 
               </div>
 
               <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-[11px] text-emerald-900 flex flex-col justify-center">
-                <span className="font-bold">Aturan Pengerjaan (1x per Jadwal):</span>
+                <span className="font-bold">Jumlah Soal &amp; Aturan (1x per Jadwal):</span>
                 <span className="mt-0.5 leading-snug">
-                  Penjadwalan hanya untuk 1x pengerjaan. Jika belum mencapai KKM <strong>{data.selectedExam.kktpScore}</strong>, murid dapat dijadwalkan ulang dengan jumlah soal yang sama sampai Tuntas Remedial.
+                  Jumlah soal disesuaikan dengan kekurangan nilai ke KKM <strong>{data.selectedExam.kktpScore}</strong>. Berlaku 1x pengerjaan; jika belum lulus dapat dijadwalkan ulang dengan jumlah soal yang sama.
                 </span>
               </div>
             </div>
