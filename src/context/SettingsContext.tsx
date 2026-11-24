@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: SchoolSettings = {
   appSubtitle: 'Portal Ujian Berbasis Komputer',
   academicYearText: '2024/2025 Genap',
   teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+  showDeleteExamAction: true,
 };
 
 interface SettingsContextType {
@@ -31,6 +32,10 @@ function mergeWithDefaultSettings(raw?: Partial<SchoolSettings> | null): SchoolS
     ...DEFAULT_SETTINGS,
     ...(raw || {}),
     teacherMenus: normalizeTeacherMenus(raw?.teacherMenus),
+    showDeleteExamAction:
+      raw?.showDeleteExamAction !== undefined
+        ? Boolean(raw.showDeleteExamAction)
+        : DEFAULT_SETTINGS.showDeleteExamAction,
   };
 }
 

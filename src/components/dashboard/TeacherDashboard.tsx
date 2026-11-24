@@ -4,6 +4,10 @@ import {
   Exam,
   Question,
   ClassGroup,
+  Subject,
+  Chapter,
+  Subchapter,
+  Competency,
   TeacherMenuKey,
   normalizeTeacherMenus,
 } from '../../types/cbt';
@@ -26,6 +30,9 @@ import {
   Trash2,
   AlertTriangle,
   ClipboardCheck,
+  BarChart3,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { NavTab } from '../layout/AppLayout';
 
@@ -61,6 +68,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [classes, setClasses] = useState<ClassGroup[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [subchapters, setSubchapters] = useState<Subchapter[]>([]);
+  const [competencies, setCompetencies] = useState<Competency[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit Exam (Target Classes & Schedule)
@@ -77,6 +88,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
   const [isDeletingExam, setIsDeletingExam] = useState(false);
 
+  // Question Proportion Modal (Low / Med / High)
+  const [proportionExam, setProportionExam] = useState<Exam | null>(null);
+  const [copiedProportion, setCopiedProportion] = useState(false);
+
   useEffect(() => {
     loadData();
   }, [refreshKey]);
@@ -84,14 +99,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const loadData = async () => {
     try {
       setLoading(true);
-      const [examsRes, questionsRes, classesRes] = await Promise.all([
+      const [examsRes, questionsRes, classesRes, taxRes] = await Promise.all([
         api.getExams(),
         api.getQuestions(),
         api.getClasses().catch(() => ({ classes: [] })),
+        api.getTaxonomy().catch(() => ({ subjects: [], chapters: [], subchapters: [], competencies: [] })),
       ]);
       setExams(examsRes.exams || []);
       setQuestions(questionsRes.questions || []);
       setClasses(classesRes.classes || []);
+      setSubjects(taxRes.subjects || []);
+      setChapters(taxRes.chapters || []);
+      setSubchapters(taxRes.subchapters || []);
+      setCompetencies(taxRes.competencies || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -164,6 +184,42 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const motsCount = questions.filter((q) => q.cognitiveLevel === 'MOTS' && q.status === 'active').length;
   const hotsCount = questions.filter((q) => q.cognitiveLevel === 'HOTS' && q.status === 'active').length;
   const activeExams = exams.filter((e) => e.status === 'active');
+  const showDeleteExamAction = settings.showDeleteExamAction !== false;
+
+  const resolveScopeLabel = (unit: {
+    scopeType?: string;
+    scopeId?: string;
+    chapterId?: string;
+    subchapterId?: string;
+    competencyId?: string;
+    label?: string;
+  }) => {
+    if (unit.label && unit.label.trim().length > 0) return unit.label;
+    const ch = chapters.find((c) => c.id === unit.chapterId)?.name;
+    const sc = subchapters.find((s) => s.id === unit.subchapterId)?.name;
+    const cmp = competencies.find((k) => k.id === unit.competencyId);
+    const cmpLabel = cmp ? `${cmp.code ? `[${cmp.code}] ` : ''}${cmp.description}` : '';
+    return [ch, sc, cmpLabel].filter(Boolean).join(' › ') || unit.scopeId || 'Materi Ujian';
+  };
+
+  const getExamProportionSummary = (exam: Exam) => {
+    const target = exam.cognitiveTarget;
+    const perScope = Array.isArray(target?.perScopeTargets) ? target.perScopeTargets : [];
+    const low =
+      perScope.length > 0
+        ? perScope.reduce((sum, u) => sum + Math.max(0, Number(u.lotsCount) || 0), 0)
+        : Math.max(0, Number(target?.lotsCount) || 0);
+    const med =
+      perScope.length > 0
+        ? perScope.reduce((sum, u) => sum + Math.max(0, Number(u.motsCount) || 0), 0)
+        : Math.max(0, Number(target?.motsCount) || 0);
+    const high =
+      perScope.length > 0
+        ? perScope.reduce((sum, u) => sum + Math.max(0, Number(u.hotsCount) || 0), 0)
+        : Math.max(0, Number(target?.hotsCount) || 0);
+    const total = Math.max(low + med + high, Number(target?.totalQuestions) || 0);
+    return { low, med, high, total, perScope };
+  };
 
   return (
     <div className="space-y-6">
@@ -470,6 +526,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => {
+                            setCopiedProportion(false);
+                            setProportionExam(exam);
+                          }}
+                          className="p-1.5 text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors"
+                          title="Proporsi Soal (Low, Med, High)"
+                          aria-label="Proporsi Soal Low, Med, High"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleOpenEditExam(exam)}
                           className="p-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
                           title="Edit Paket Ujian (Kelas & Jadwal)"
@@ -503,14 +570,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             <Award className="w-4 h-4" />
                           </button>
                         )}
-                        <button
-                          onClick={() => setDeletingExam(exam)}
-                          className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
-                          title="Hapus Paket Ujian"
-                          aria-label="Hapus Paket Ujian"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {showDeleteExamAction && (
+                          <button
+                            onClick={() => setDeletingExam(exam)}
+                            className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"
+                            title="Hapus Paket Ujian"
+                            aria-label="Hapus Paket Ujian"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -668,6 +737,199 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </form>
         </div>
       )}
+      {/* Modal Proporsi Soal Low / Med / High */}
+      {proportionExam && (() => {
+        const { low, med, high, total, perScope } = getExamProportionSummary(proportionExam);
+        const denom = low + med + high || total || 1;
+        const lowPct = Math.round((low / denom) * 100);
+        const medPct = Math.round((med / denom) * 100);
+        const highPct = Math.round((high / denom) * 100);
+        const subjectName = subjects.find((s) => s.id === proportionExam.subjectId)?.name;
+
+        const handleCopyProportion = async () => {
+          const lines =
+            perScope.length > 0
+              ? perScope.map(
+                  (u) =>
+                    `${resolveScopeLabel(u)}\t${Number(u.lotsCount) || 0}L · ${Number(u.motsCount) || 0}M · ${Number(u.hotsCount) || 0}H`
+                )
+              : [`${proportionExam.title}\t${low}L · ${med}M · ${high}H`];
+          try {
+            await navigator.clipboard.writeText(lines.join('\n'));
+            setCopiedProportion(true);
+            setTimeout(() => setCopiedProportion(false), 2500);
+          } catch {}
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-sky-600" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Proporsi Soal (Low, Med, High)
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    <strong className="text-slate-700">{proportionExam.title}</strong>
+                    {subjectName ? ` · ${subjectName}` : ''} · Total {total} Soal
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyProportion}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors"
+                    title="Salin rincian proporsi"
+                  >
+                    {copiedProportion ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700">Tersalin</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProportionExam(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4 overflow-y-auto text-xs">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
+                    <div className="text-[11px] font-semibold text-emerald-800">Low (LOTS)</div>
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span className="text-xl font-bold font-mono text-emerald-900">{low}</span>
+                      <span className="text-[11px] font-mono font-semibold text-emerald-700">
+                        {lowPct}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200">
+                    <div className="text-[11px] font-semibold text-indigo-800">Med (MOTS)</div>
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span className="text-xl font-bold font-mono text-indigo-900">{med}</span>
+                      <span className="text-[11px] font-mono font-semibold text-indigo-700">
+                        {medPct}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200">
+                    <div className="text-[11px] font-semibold text-purple-800">High (HOTS)</div>
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span className="text-xl font-bold font-mono text-purple-900">{high}</span>
+                      <span className="text-[11px] font-mono font-semibold text-purple-700">
+                        {highPct}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stacked Bar */}
+                <div>
+                  <div className="flex justify-between text-[11px] text-slate-500 mb-1.5">
+                    <span>Distribusi Level Kognitif Paket Ujian</span>
+                    <span className="font-mono font-semibold text-slate-700">
+                      {low}L · {med}M · {high}H
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
+                    {low > 0 && (
+                      <div
+                        className="h-full bg-emerald-500"
+                        style={{ width: `${(low / denom) * 100}%` }}
+                        title={`Low (LOTS): ${low} soal`}
+                      />
+                    )}
+                    {med > 0 && (
+                      <div
+                        className="h-full bg-indigo-500"
+                        style={{ width: `${(med / denom) * 100}%` }}
+                        title={`Med (MOTS): ${med} soal`}
+                      />
+                    )}
+                    {high > 0 && (
+                      <div
+                        className="h-full bg-purple-600"
+                        style={{ width: `${(high / denom) * 100}%` }}
+                        title={`High (HOTS): ${high} soal`}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Per-Scope Breakdown */}
+                {perScope.length > 0 ? (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                      <span className="font-bold text-slate-800">
+                        Rincian Proporsi per Materi / Kompetensi ({perScope.length})
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-500">L · M · H</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {perScope.map((unit, idx) => {
+                        const uL = Number(unit.lotsCount) || 0;
+                        const uM = Number(unit.motsCount) || 0;
+                        const uH = Number(unit.hotsCount) || 0;
+                        return (
+                          <div
+                            key={`${unit.scopeType}:${unit.scopeId}:${idx}`}
+                            className="px-3.5 py-2.5 flex items-center justify-between gap-4 hover:bg-slate-50/70"
+                          >
+                            <span className="text-slate-800 leading-snug">
+                              {resolveScopeLabel(unit)}
+                            </span>
+                            <span className="font-mono font-bold text-slate-900 shrink-0 whitespace-nowrap">
+                              <span className="text-emerald-700">{uL}L</span>
+                              <span className="text-slate-400 mx-1">·</span>
+                              <span className="text-indigo-700">{uM}M</span>
+                              <span className="text-slate-400 mx-1">·</span>
+                              <span className="text-purple-700">{uH}H</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[11px] leading-relaxed">
+                    Paket ujian ini menggunakan komposisi global:{' '}
+                    <strong className="font-mono text-slate-900">
+                      {low}L · {med}M · {high}H
+                    </strong>{' '}
+                    (Low: {low} soal, Med: {med} soal, High: {high} soal).
+                  </div>
+                )}
+              </div>
+
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setProportionExam(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Modal Konfirmasi Hapus Paket Ujian */}
       {deletingExam && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">

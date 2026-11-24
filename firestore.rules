@@ -57,6 +57,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Remedial Assignments Collection
+    match /remedial_assignments/{assignmentId} {
+      allow read, write: if true;
+    }
+
     // Connection Test
     match /test/{docId} {
       allow read, write: if true;

@@ -17,6 +17,9 @@ import {
   AIIndividualAnalytics,
   AIClassicalAnalytics,
   SchoolSettings,
+  RemedialOverviewPayload,
+  RemedialMode,
+  RemedialAssignment,
 } from '../types/cbt';
 import { clientStore } from './clientStore';
 
@@ -77,6 +80,12 @@ export const api = {
 
   getActivityLogs: () =>
     request<{ logs: Array<{ id: string; timestamp: string; actorName: string; role: string; action: string; details: string }> }>('/activity-logs'),
+
+  recordActivityLog: (entry: { actorName: string; role: string; action: string; details: string }) =>
+    request<{ success: boolean }>('/activity-logs', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    }),
 
   // Auth
   login: (username: string, password: string, portal?: 'student' | 'staff') =>
@@ -429,5 +438,29 @@ export const api = {
     request<{ success: boolean; analytics: AIClassicalAnalytics | null; message?: string }>('/analytics/classical', {
       method: 'POST',
       body: JSON.stringify({ examId }),
+    }),
+
+  // Remedial Management
+  getRemedialOverview: (examId?: string) =>
+    request<RemedialOverviewPayload>(
+      examId ? `/remedial?examId=${encodeURIComponent(examId)}` : '/remedial'
+    ),
+
+  generateRemedials: (payload: {
+    examId: string;
+    mode: RemedialMode;
+    studentIds?: string[];
+    durationMinutes?: number;
+    actorName?: string;
+    actorRole?: string;
+  }) =>
+    request<{
+      success: boolean;
+      count: number;
+      assignments: RemedialAssignment[];
+      message: string;
+    }>('/remedial/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 };

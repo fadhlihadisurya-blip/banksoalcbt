@@ -19,6 +19,7 @@ import {
   Layers,
   Settings,
   ClipboardCheck,
+  RotateCcw,
 } from 'lucide-react';
 
 export type NavTab =
@@ -28,6 +29,7 @@ export type NavTab =
   | 'exams'
   | 'monitoring'
   | 'results'
+  | 'remedial'
   | 'anbuso'
   | 'classes'
   | 'users'
@@ -61,6 +63,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         { id: 'exams' as NavTab, label: 'Daftar Ujian', icon: FileQuestion },
         { id: 'monitoring' as NavTab, label: 'Monitoring Ujian', icon: Activity },
         { id: 'results' as NavTab, label: 'Hasil & Penilaian', icon: Award },
+        { id: 'remedial' as NavTab, label: 'Remedial', icon: RotateCcw },
         { id: 'anbuso' as NavTab, label: 'Anbuso', icon: ClipboardCheck },
         { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
       ];
@@ -80,6 +83,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         { id: 'exams', label: 'Daftar Ujian', icon: FileQuestion },
         { id: 'monitoring', label: 'Monitoring Ujian', icon: Activity },
         { id: 'results', label: 'Hasil & Penilaian', icon: Award },
+        { id: 'remedial', label: 'Remedial', icon: RotateCcw },
         { id: 'anbuso', label: 'Anbuso', icon: ClipboardCheck },
       ];
 

@@ -20,7 +20,14 @@ import {
 import { generateRandomPassword, hashPasswordAsync } from './passwordUtils';
 import { computeLiveStudentScore } from './liveScore';
 import { isQuestionInExamScope, questionMatchesScopeUnit, evaluateScopeAvailability } from './examPool';
-import { DEFAULT_TEACHER_MENUS, normalizeTeacherMenus } from '../types/cbt';
+import { DEFAULT_TEACHER_MENUS, normalizeTeacherMenus, RemedialMode } from '../types/cbt';
+import {
+  extractWrongQuestionDetails,
+  selectRemedialQuestions,
+  computePointsPerCorrectForRemedial,
+  computeRemedialFinalScore,
+  computeRemedialDuration,
+} from './remedialHelper';
 
 class DomainValidationError extends Error {}
 
@@ -59,6 +66,7 @@ const DEFAULT_SETTINGS = {
   appSubtitle: '',
   academicYearText: '2024/2025 Genap',
   teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+  showDeleteExamAction: true,
 };
 
 async function findTaxonomyDocRef(type: string, id: string) {
@@ -91,6 +99,8 @@ export const firestoreStore = {
             ...DEFAULT_SETTINGS,
             ...data,
             teacherMenus: normalizeTeacherMenus(data?.teacherMenus),
+            showDeleteExamAction:
+              data?.showDeleteExamAction !== undefined ? Boolean(data.showDeleteExamAction) : true,
           },
         };
       }
@@ -115,6 +125,12 @@ export const firestoreStore = {
         ...current,
         ...settingsData,
         teacherMenus: mergedMenus,
+        showDeleteExamAction:
+          settingsData?.showDeleteExamAction !== undefined
+            ? Boolean(settingsData.showDeleteExamAction)
+            : current?.showDeleteExamAction !== undefined
+            ? Boolean(current.showDeleteExamAction)
+            : true,
         updatedAt: new Date().toISOString(),
       });
       await setDoc(ref, updated, { merge: true });
@@ -135,6 +151,30 @@ export const firestoreStore = {
       return { logs };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
+  recordActivityLog: async (entry: {
+    actorName: string;
+    role: string;
+    action: string;
+    details: string;
+  }) => {
+    const path = 'activity_logs';
+    try {
+      const id = `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const logDoc = stripUndefinedDeep({
+        id,
+        timestamp: new Date().toISOString(),
+        actorName: String(entry.actorName || 'Pengguna').trim(),
+        role: String(entry.role || 'system').trim(),
+        action: String(entry.action || 'ACTIVITY').trim(),
+        details: String(entry.details || '').trim(),
+      });
+      await setDoc(doc(db, path, id), logDoc);
+      return { success: true, log: logDoc };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
     }
   },
 
@@ -718,15 +758,23 @@ export const firestoreStore = {
     const path = `exams/${id}`;
     try {
       await deleteDoc(doc(db, 'exams', id));
-      const [sessionsSnap, resultsSnap] = await Promise.all([
+      const [sessionsSnap, remSessionsSnap, resultsSnap, remSnap] = await Promise.all([
         getDocs(query(collection(db, 'exam_sessions'), where('examId', '==', id))),
+        getDocs(query(collection(db, 'exam_sessions'), where('examId', '==', `rem_${id}`))),
         getDocs(query(collection(db, 'exam_results'), where('examId', '==', id))),
+        getDocs(query(collection(db, 'remedial_assignments'), where('sourceExamId', '==', id))),
       ]);
       for (const sDoc of sessionsSnap.docs) {
         await deleteDoc(sDoc.ref);
       }
+      for (const sDoc of remSessionsSnap.docs) {
+        await deleteDoc(sDoc.ref);
+      }
       for (const rDoc of resultsSnap.docs) {
         await deleteDoc(rDoc.ref);
+      }
+      for (const remDoc of remSnap.docs) {
+        await deleteDoc(remDoc.ref);
       }
       return { success: true, message: 'Paket ujian berhasil dihapus.' };
     } catch (error) {
@@ -810,12 +858,13 @@ export const firestoreStore = {
   getStudentExams: async (studentId: string) => {
     const path = 'exams';
     try {
-      const [usersSnap, examsSnap, subjectsSnap, sessionsSnap, resultsSnap] = await Promise.all([
+      const [usersSnap, examsSnap, subjectsSnap, sessionsSnap, resultsSnap, remSnap] = await Promise.all([
         getDocs(query(collection(db, 'users'), where('id', '==', studentId))),
         getDocs(collection(db, 'exams')),
         getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
         getDocs(query(collection(db, 'exam_sessions'), where('studentId', '==', studentId))),
         getDocs(query(collection(db, 'exam_results'), where('studentId', '==', studentId))),
+        getDocs(query(collection(db, 'remedial_assignments'), where('studentId', '==', studentId))),
       ]);
 
       let studentData = !usersSnap.empty ? (usersSnap.docs[0].data() as any) : null;
@@ -836,6 +885,11 @@ export const firestoreStore = {
         subjectMap.set(data.id || s.id, data.name || 'Mata Pelajaran');
       }
 
+      const examMap = new Map<string, any>();
+      for (const e of examsSnap.docs) {
+        examMap.set(e.id, { id: e.id, ...(e.data() as any) });
+      }
+
       const sessionMap = new Map<string, any>();
       for (const s of sessionsSnap.docs) {
         const data = s.data() as any;
@@ -848,8 +902,7 @@ export const firestoreStore = {
         if (data.examId) resultMap.set(data.examId, data);
       }
 
-      const exams = examsSnap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+      const exams = Array.from(examMap.values())
         .filter((e: any) => Array.isArray(e.targetClassIds) && e.targetClassIds.includes(studentClassId))
         .map((e: any) => {
           const session = sessionMap.get(e.id);
@@ -881,7 +934,70 @@ export const firestoreStore = {
           };
         });
 
-      return { exams };
+      const remedialExams = remSnap.docs.map((rDoc) => {
+        const rem = rDoc.data() as any;
+        const remExamId = `rem_${rem.sourceExamId}`;
+        const session = sessionMap.get(remExamId);
+        const sourceExam = examMap.get(rem.sourceExamId);
+        const subjectName =
+          rem.subjectName ||
+          subjectMap.get(rem.subjectId || sourceExam?.subjectId) ||
+          'Mata Pelajaran';
+
+        const studentStatus =
+          rem.status === 'completed'
+            ? 'completed'
+            : session && session.status !== 'completed'
+            ? 'in_progress'
+            : rem.status === 'in_progress'
+            ? 'in_progress'
+            : 'not_started';
+
+        const computedDuration = rem.durationSeconds
+          ? {
+              durationMinutes: Number(rem.durationMinutes) || Math.round((Number(rem.durationSeconds) / 60) * 10) / 10,
+              durationSeconds: Number(rem.durationSeconds),
+            }
+          : sourceExam
+          ? computeRemedialDuration({
+              examDurationMinutes: Number(sourceExam.durationMinutes) || 60,
+              examTotalQuestions:
+                Number(rem.originalTotalQuestions) ||
+                Number(sourceExam.cognitiveTarget?.totalQuestions) ||
+                (Array.isArray(rem.questionIds) ? rem.questionIds.length : 1),
+              remedialQuestionCount: Array.isArray(rem.questionIds) ? rem.questionIds.length : 1,
+            })
+          : {
+              durationMinutes: Number(rem.durationMinutes) || 45,
+              durationSeconds: (Number(rem.durationMinutes) || 45) * 60,
+            };
+
+        return {
+          id: remExamId,
+          title: `[REMEDIAL] ${rem.sourceExamTitle || sourceExam?.title || 'Ujian Sekolah'}`,
+          subject: subjectName,
+          durationMinutes: computedDuration.durationMinutes,
+          scheduleStart: rem.createdAt || sourceExam?.scheduleStart || new Date().toISOString(),
+          scheduleEnd: new Date(Date.now() + 30 * 86400000).toISOString(),
+          isTokenActive: false,
+          isPublishedResults: true,
+          studentStatus,
+          hasResult: rem.status === 'completed',
+          score: rem.status === 'completed' ? (rem.finalCappedScore ?? rem.baseScore ?? 0) : null,
+          kktpScore: Number(rem.kktpScore) || Number(sourceExam?.kktpScore) || 75,
+          violationCount: Number(session?.violationCount) || 0,
+          isRemedial: true,
+          sourceExamId: rem.sourceExamId,
+          remedialMode: rem.mode,
+          baseScore: Number(rem.baseScore) || 0,
+          addedScore: Number(rem.addedScore) || 0,
+          remedialQuestionCount: Array.isArray(rem.questionIds) ? rem.questionIds.length : 0,
+          attemptCount: Number(rem.attemptCount) || 1,
+          isRemedialPassed: rem.status === 'completed' ? Boolean(rem.isPassed) : false,
+        };
+      });
+
+      return { exams: [...exams, ...remedialExams] };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
     }
@@ -891,6 +1007,190 @@ export const firestoreStore = {
     const sessionKey = `${examId}_${studentId}`;
     const path = `exam_sessions/${sessionKey}`;
     try {
+      if (examId.startsWith('rem_')) {
+        const sourceExamId = examId.slice(4);
+        const remKey = `${sourceExamId}_${studentId}`;
+        const [remSnap, sourceExamSnap, usersSnap, classesSnap, questionsSnap, taxSnap, sessionSnap] =
+          await Promise.all([
+            getDoc(doc(db, 'remedial_assignments', remKey)),
+            getDoc(doc(db, 'exams', sourceExamId)),
+            getDocs(query(collection(db, 'users'), where('id', '==', studentId))),
+            getDocs(collection(db, 'classes')),
+            getDocs(collection(db, 'questions')),
+            getDocs(collection(db, 'taxonomy')),
+            getDoc(doc(db, 'exam_sessions', sessionKey)),
+          ]);
+
+        if (!remSnap.exists()) {
+          throw new DomainValidationError('Paket remedial tidak ditemukan untuk akun Anda.');
+        }
+        const rem = remSnap.data() as any;
+        if (rem.status === 'completed') {
+          throw new DomainValidationError('Anda sudah menyelesaikan ujian remedial ini.');
+        }
+
+        const sourceExam = sourceExamSnap.exists() ? (sourceExamSnap.data() as any) : null;
+        let student: any = !usersSnap.empty ? usersSnap.docs[0].data() : null;
+        if (!student) {
+          const directUser = await getDoc(doc(db, 'users', studentId));
+          if (directUser.exists()) student = directUser.data();
+        }
+        if (!student) throw new DomainValidationError('Siswa tidak ditemukan.');
+
+        const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const qMap = new Map(allQuestions.map((q: any) => [q.id, q]));
+        const taxItems = taxSnap.docs.map((d) => d.data() as any);
+        const subjects = taxItems.filter((t) => t.type === 'subject');
+
+        const shuffle = <T>(arr: T[]): T[] => {
+          const copy = [...arr];
+          for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+          }
+          return copy;
+        };
+
+        let session: any = sessionSnap.exists() ? sessionSnap.data() : null;
+        let pickedQuestions: any[] = [];
+
+        if (!session) {
+          const orderedIds = shuffle<string>(Array.isArray(rem.questionIds) ? rem.questionIds : []);
+          pickedQuestions = orderedIds.map((qid) => qMap.get(qid)).filter(Boolean);
+          if (pickedQuestions.length === 0) {
+            throw new DomainValidationError('Soal remedial tidak ditemukan di bank soal.');
+          }
+          const computedDuration = rem.durationSeconds
+            ? {
+                durationMinutes: Number(rem.durationMinutes) || Math.round((Number(rem.durationSeconds) / 60) * 10) / 10,
+                durationSeconds: Number(rem.durationSeconds),
+              }
+            : sourceExam
+            ? computeRemedialDuration({
+                examDurationMinutes: Number(sourceExam.durationMinutes) || 60,
+                examTotalQuestions:
+                  Number(rem.originalTotalQuestions) ||
+                  Number(sourceExam.cognitiveTarget?.totalQuestions) ||
+                  pickedQuestions.length,
+                remedialQuestionCount: pickedQuestions.length,
+              })
+            : {
+                durationMinutes: Number(rem.durationMinutes) || 45,
+                durationSeconds: (Number(rem.durationMinutes) || 45) * 60,
+              };
+          const durationSeconds = computedDuration.durationSeconds;
+          const classDoc = classesSnap.docs.find((c) => c.id === student.classId || c.data()?.id === student.classId);
+          const studentClassName = classDoc?.data()?.name || rem.className || 'Kelas';
+          const nowIso = new Date().toISOString();
+
+          session = {
+            id: sessionKey,
+            examId,
+            studentId,
+            studentName: student.name,
+            studentNis: student.nis || student.username,
+            className: studentClassName,
+            status: 'in_progress',
+            startedAt: nowIso,
+            durationSeconds,
+            remainingSeconds: durationSeconds,
+            currentQuestionIndex: 0,
+            answers: {},
+            doubtfulFlags: {},
+            violationCount: 0,
+            violations: [],
+            questionIds: pickedQuestions.map((q: any) => q.id),
+            lastHeartbeat: nowIso,
+          };
+
+          await Promise.all([
+            setDoc(doc(db, 'exam_sessions', sessionKey), stripUndefinedDeep(session)),
+            updateDoc(doc(db, 'remedial_assignments', remKey), {
+              status: 'in_progress',
+              updatedAt: nowIso,
+            }),
+          ]);
+        } else {
+          if (session.status === 'completed') {
+            throw new DomainValidationError('Anda sudah menyelesaikan ujian remedial ini.');
+          }
+          pickedQuestions = (Array.isArray(session.questionIds) ? session.questionIds : rem.questionIds || [])
+            .map((qid: string) => qMap.get(qid))
+            .filter(Boolean);
+        }
+
+        const sanitizedQuestions = pickedQuestions.map((q: any, idx: number) => {
+          let sanitizedOptions: any = undefined;
+          if (q.options && Array.isArray(q.options)) {
+            if (q.type === 'pg' || q.type === 'pg_kompleks') {
+              sanitizedOptions = shuffle(q.options).map((opt: any) => ({ id: opt.id, text: opt.text }));
+            } else {
+              sanitizedOptions = q.options.map((opt: any) => ({ id: opt.id, text: opt.text }));
+            }
+          }
+          const maxSelectable =
+            q.type === 'pg_kompleks' && Array.isArray(q.correctAnswer)
+              ? q.correctAnswer.length
+              : undefined;
+          return {
+            number: idx + 1,
+            id: q.id,
+            subjectId: q.subjectId,
+            chapterId: q.chapterId,
+            subchapterId: q.subchapterId,
+            competencyId: q.competencyId,
+            cognitiveLevel: q.cognitiveLevel || 'MOTS',
+            type: q.type,
+            questionText: q.questionText,
+            options: sanitizedOptions,
+            points: Number(rem.pointsPerCorrect) || 10,
+            ...(maxSelectable !== undefined ? { maxSelectable } : {}),
+          };
+        });
+
+        const subjectName =
+          rem.subjectName ||
+          subjects.find((s: any) => s.id === (rem.subjectId || sourceExam?.subjectId))?.name ||
+          'Mata Pelajaran';
+
+        return {
+          success: true,
+          session,
+          exam: {
+            id: examId,
+            title: `[REMEDIAL] ${rem.sourceExamTitle || sourceExam?.title || 'Ujian Sekolah'}`,
+            subjectName,
+            durationMinutes: rem.durationSeconds
+              ? Number(rem.durationMinutes) || Math.round((Number(rem.durationSeconds) / 60) * 10) / 10
+              : sourceExam
+              ? computeRemedialDuration({
+                  examDurationMinutes: Number(sourceExam.durationMinutes) || 60,
+                  examTotalQuestions:
+                    Number(rem.originalTotalQuestions) ||
+                    Number(sourceExam.cognitiveTarget?.totalQuestions) ||
+                    (Array.isArray(rem.questionIds) ? rem.questionIds.length : 1),
+                  remedialQuestionCount: Array.isArray(rem.questionIds) ? rem.questionIds.length : 1,
+                }).durationMinutes
+              : Number(rem.durationMinutes) || 45,
+            antiCheating: sourceExam?.antiCheating || {
+              forceFullscreen: true,
+              detectTabSwitch: true,
+              blockRightClick: true,
+              blockCopyPaste: true,
+              maxToleranceViolations: 3,
+              autoSubmitOnViolationLimit: false,
+            },
+            scoringConfig: sourceExam?.scoringConfig || {
+              pgKompleksMode: 'partial',
+              useMinusSystem: false,
+              minusValue: 0,
+              weights: { LOTS: 10, MOTS: 10, HOTS: 10 },
+            },
+          },
+          questions: sanitizedQuestions,
+        };
+      }
+
       const [examSnap, usersSnap, classesSnap, questionsSnap, taxSnap, sessionSnap] = await Promise.all([
         getDoc(doc(db, 'exams', examId)),
         getDocs(query(collection(db, 'users'), where('id', '==', studentId))),
@@ -1213,6 +1513,134 @@ export const firestoreStore = {
     const sessionKey = `${examId}_${studentId}`;
     const path = `exam_results/${sessionKey}`;
     try {
+      if (examId.startsWith('rem_')) {
+        const sourceExamId = examId.slice(4);
+        const remKey = `${sourceExamId}_${studentId}`;
+        const [remSnap, sourceExamSnap, sessionSnap, questionsSnap] = await Promise.all([
+          getDoc(doc(db, 'remedial_assignments', remKey)),
+          getDoc(doc(db, 'exams', sourceExamId)),
+          getDoc(doc(db, 'exam_sessions', sessionKey)),
+          getDocs(collection(db, 'questions')),
+        ]);
+
+        if (!remSnap.exists() || !sessionSnap.exists()) {
+          throw new DomainValidationError('Data remedial atau sesi tidak ditemukan.');
+        }
+
+        const rem = remSnap.data() as any;
+        const sourceExam = sourceExamSnap.exists() ? (sourceExamSnap.data() as any) : null;
+        const session = sessionSnap.data() as any;
+        const finalAnswers = answers ? { ...(session.answers || {}), ...answers } : session.answers || {};
+        const completedAt = new Date().toISOString();
+
+        const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const qMap = new Map(allQuestions.map((q: any) => [q.id, q]));
+        const qIds: string[] = Array.isArray(session.questionIds)
+          ? session.questionIds
+          : Array.isArray(rem.questionIds)
+          ? rem.questionIds
+          : [];
+
+        let correctCount = 0;
+        let wrongCount = 0;
+        let emptyCount = 0;
+        let correctUnits = 0;
+        const pgKompleksMode = sourceExam?.scoringConfig?.pgKompleksMode === 'exact' ? 'exact' : 'partial';
+
+        for (const qid of qIds) {
+          const master = qMap.get(qid);
+          const studentAns = finalAnswers[qid];
+          const isUnanswered =
+            studentAns === undefined ||
+            studentAns === null ||
+            studentAns === '' ||
+            (Array.isArray(studentAns) && studentAns.length === 0);
+
+          if (isUnanswered) {
+            emptyCount++;
+          } else if (master?.type === 'pg') {
+            if (String(studentAns).trim().toUpperCase() === String(master.correctAnswer).trim().toUpperCase()) {
+              correctCount++;
+              correctUnits += 1;
+            } else {
+              wrongCount++;
+            }
+          } else if (master?.type === 'pg_kompleks') {
+            const correctArr = Array.isArray(master.correctAnswer)
+              ? Array.from(new Set(master.correctAnswer.map(String))).sort()
+              : [];
+            const studentArr = Array.isArray(studentAns)
+              ? Array.from(new Set(studentAns.map(String))).sort()
+              : [];
+            if (correctArr.length > 0 && JSON.stringify(correctArr) === JSON.stringify(studentArr)) {
+              correctCount++;
+              correctUnits += 1;
+            } else {
+              wrongCount++;
+              if (pgKompleksMode === 'partial' && correctArr.length > 0) {
+                const matches = studentArr.filter((item: string) => correctArr.includes(item)).length;
+                if (matches > 0) {
+                  correctUnits += matches / correctArr.length;
+                }
+              }
+            }
+          } else if (master?.type === 'benar_salah') {
+            if (String(studentAns) === String(master.correctAnswer)) {
+              correctCount++;
+              correctUnits += 1;
+            } else {
+              wrongCount++;
+            }
+          } else if (master?.type === 'esai') {
+            correctCount++;
+            correctUnits += 0.8;
+          }
+        }
+
+        const scoring = computeRemedialFinalScore({
+          baseScore: Number(rem.baseScore) || 0,
+          kktpScore: Number(rem.kktpScore) || Number(sourceExam?.kktpScore) || 75,
+          pointsPerCorrect: Number(rem.pointsPerCorrect) || 10,
+          correctUnits,
+        });
+
+        await Promise.all([
+          updateDoc(doc(db, 'exam_sessions', sessionKey), stripUndefinedDeep({
+            answers: finalAnswers,
+            status: 'completed',
+            completedAt,
+          })),
+          updateDoc(doc(db, 'remedial_assignments', remKey), stripUndefinedDeep({
+            status: 'completed',
+            remedialCorrectCount: correctCount,
+            remedialWrongCount: wrongCount,
+            remedialEmptyCount: emptyCount,
+            addedScore: scoring.addedScore,
+            finalCappedScore: scoring.finalCappedScore,
+            isPassed: scoring.isPassed,
+            completedAt,
+            updatedAt: completedAt,
+          })),
+        ]);
+
+        return {
+          success: true,
+          result: {
+            finalScore: scoring.finalCappedScore,
+            isPassed: scoring.isPassed,
+            correctCount,
+            wrongCount,
+            emptyCount,
+            totalQuestions: qIds.length,
+            isPublished: true,
+            isRemedial: true,
+            baseScore: rem.baseScore,
+            addedScore: scoring.addedScore,
+            kktpScore: rem.kktpScore,
+          },
+        };
+      }
+
       const [examSnap, sessionSnap, questionsSnap] = await Promise.all([
         getDoc(doc(db, 'exams', examId)),
         getDoc(doc(db, 'exam_sessions', sessionKey)),
@@ -1563,10 +1991,11 @@ export const firestoreStore = {
   getExamResults: async (examId: string) => {
     const path = 'exam_results';
     try {
-      const [examSnap, resultsSnap, questionsSnap] = await Promise.all([
+      const [examSnap, resultsSnap, questionsSnap, remSnap] = await Promise.all([
         getDoc(doc(db, 'exams', examId)),
         getDocs(query(collection(db, path), where('examId', '==', examId))),
         getDocs(collection(db, 'questions')),
+        getDocs(query(collection(db, 'remedial_assignments'), where('sourceExamId', '==', examId))),
       ]);
       const exam = examSnap.exists() ? examSnap.data() : null;
       const questionCodeMap = new Map<string, string>();
@@ -1574,8 +2003,24 @@ export const firestoreStore = {
         const qd = qDoc.data() as any;
         questionCodeMap.set(String(qd.id || qDoc.id), String(qd.code || ''));
       }
+      const remedialByStudent = new Map<string, any>();
+      for (const remDoc of remSnap.docs) {
+        const rd = remDoc.data() as any;
+        if (rd.studentId) {
+          remedialByStudent.set(String(rd.studentId), rd);
+        }
+      }
       const results = resultsSnap.docs.map((d) => {
         const r = d.data() as any;
+        const rem = remedialByStudent.get(String(r.studentId)) || null;
+        const isRemedialPassed =
+          !Boolean(r.isPassed) && rem?.status === 'completed' && Boolean(rem?.isPassed);
+        const kktpStatusLabel = r.isPassed
+          ? 'Tuntas'
+          : isRemedialPassed
+          ? 'Tuntas Remedial'
+          : 'Perlu Remedial';
+
         const enrichedDetails = Array.isArray(r.questionDetails)
           ? r.questionDetails.map((qd: any) => ({
               ...qd,
@@ -1584,6 +2029,8 @@ export const firestoreStore = {
           : [];
         return {
           ...r,
+          isRemedialPassed,
+          kktpStatusLabel,
           questionDetails: enrichedDetails,
         };
       });
@@ -1597,7 +2044,7 @@ export const firestoreStore = {
           ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
           : sorted[Math.floor(sorted.length / 2)]
         : 0;
-      const passedCount = results.filter((r: any) => r.isPassed).length;
+      const passedCount = results.filter((r: any) => r.isPassed || r.isRemedialPassed).length;
       const passingRate = results.length ? Math.round((passedCount / results.length) * 100) : 0;
 
       return {
@@ -1622,9 +2069,10 @@ export const firestoreStore = {
   getStudentResults: async (studentId: string) => {
     const path = 'exam_results';
     try {
-      const [resultsSnap, examsSnap] = await Promise.all([
+      const [resultsSnap, examsSnap, remSnap] = await Promise.all([
         getDocs(query(collection(db, path), where('studentId', '==', studentId))),
         getDocs(collection(db, 'exams')),
+        getDocs(query(collection(db, 'remedial_assignments'), where('studentId', '==', studentId))),
       ]);
 
       const examMap = new Map<string, any>();
@@ -1633,29 +2081,58 @@ export const firestoreStore = {
         examMap.set(data.id || eDoc.id, data);
       }
 
-      const results = resultsSnap.docs
-        .map((d) => {
-          const r = d.data() as any;
-          const exam = examMap.get(r.examId);
-          const isPublished = Boolean(exam?.isPublishedResults);
-          return {
-            id: r.id || d.id,
-            examId: r.examId,
-            examTitle: exam?.title || 'Ujian Sekolah',
-            studentId: r.studentId,
-            studentName: r.studentName || '-',
-            studentNis: r.studentNis || '-',
-            className: r.className || '-',
-            completedAt: r.completedAt || '',
-            correctCount: isPublished ? (Number(r.correctCount) || 0) : null,
-            wrongCount: isPublished ? (Number(r.wrongCount) || 0) : null,
-            emptyCount: Number(r.emptyCount) || 0,
-            totalQuestions: Number(r.totalQuestions) || 0,
-            isPublishedResults: isPublished,
-            finalScore: isPublished ? (r.finalScore ?? 0) : null,
-          };
-        })
-        .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
+      const regularResults = resultsSnap.docs.map((d) => {
+        const r = d.data() as any;
+        const exam = examMap.get(r.examId);
+        const isPublished = Boolean(exam?.isPublishedResults);
+        return {
+          id: r.id || d.id,
+          examId: r.examId,
+          examTitle: exam?.title || 'Ujian Sekolah',
+          studentId: r.studentId,
+          studentName: r.studentName || '-',
+          studentNis: r.studentNis || '-',
+          className: r.className || '-',
+          completedAt: r.completedAt || '',
+          correctCount: isPublished ? (Number(r.correctCount) || 0) : null,
+          wrongCount: isPublished ? (Number(r.wrongCount) || 0) : null,
+          emptyCount: Number(r.emptyCount) || 0,
+          totalQuestions: Number(r.totalQuestions) || 0,
+          isPublishedResults: isPublished,
+          finalScore: isPublished ? (r.finalScore ?? 0) : null,
+          isRemedial: false,
+        };
+      });
+
+      const remedialResults = remSnap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) }))
+        .filter((rem: any) => rem.status === 'completed')
+        .map((rem: any) => ({
+          id: `rem-res-${rem.id}`,
+          examId: `rem_${rem.sourceExamId}`,
+          examTitle: `[REMEDIAL] ${rem.sourceExamTitle || 'Ujian Sekolah'}`,
+          studentId: rem.studentId,
+          studentName: rem.studentName || '-',
+          studentNis: rem.studentNis || '-',
+          className: rem.className || '-',
+          completedAt: rem.completedAt || rem.updatedAt || rem.createdAt || '',
+          correctCount: Number(rem.remedialCorrectCount) || 0,
+          wrongCount: Number(rem.remedialWrongCount) || 0,
+          emptyCount: Number(rem.remedialEmptyCount) || 0,
+          totalQuestions: Array.isArray(rem.questionIds) ? rem.questionIds.length : 0,
+          isPublishedResults: true,
+          finalScore: rem.finalCappedScore ?? rem.baseScore ?? 0,
+          isRemedial: true,
+          baseScore: Number(rem.baseScore) || 0,
+          addedScore: Number(rem.addedScore) || 0,
+          kktpScore: Number(rem.kktpScore) || 75,
+          attemptCount: Number(rem.attemptCount) || 1,
+          isRemedialPassed: Boolean(rem.isPassed),
+        }));
+
+      const results = [...regularResults, ...remedialResults].sort(
+        (a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime()
+      );
 
       const publishedScores = results
         .filter((r) => r.isPublishedResults && typeof r.finalScore === 'number')
@@ -1691,6 +2168,394 @@ export const firestoreStore = {
       return { results, stats };
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
+  // --- REMEDIAL ---
+  getRemedialOverview: async (requestedExamId?: string) => {
+    const path = 'remedial_assignments';
+    try {
+      const [examsSnap, resultsSnap, remSnap, questionsSnap, taxSnap] = await Promise.all([
+        getDocs(collection(db, 'exams')),
+        getDocs(collection(db, 'exam_results')),
+        getDocs(collection(db, 'remedial_assignments')),
+        getDocs(collection(db, 'questions')),
+        getDocs(collection(db, 'taxonomy')),
+      ]);
+
+      const exams = examsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const allResults = resultsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const allRemedials = remSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const taxItems = taxSnap.docs.map((d) => d.data() as any);
+
+      const subjectMap = new Map<string, string>(
+        taxItems.filter((t) => t.type === 'subject').map((s) => [String(s.id), String(s.name || 'Mata Pelajaran')])
+      );
+      const subchapterMap = new Map<string, string>(
+        taxItems.filter((t) => t.type === 'subchapter').map((s) => [String(s.id), String(s.name || '')])
+      );
+      const compMap = new Map<string, string>(
+        taxItems.filter((t) => t.type === 'competency').map((c) => [String(c.id), String(c.code || c.description || '')])
+      );
+
+      const completedExams = exams
+        .map((exam: any) => {
+          const examResults = allResults.filter((r: any) => r.examId === exam.id);
+          if (examResults.length === 0) return null;
+          const kktp = Number(exam.kktpScore) || 75;
+          const examRems = allRemedials.filter((rem: any) => rem.sourceExamId === exam.id);
+          return {
+            id: exam.id,
+            title: exam.title,
+            subjectName: subjectMap.get(String(exam.subjectId)) || 'Mata Pelajaran',
+            kktpScore: kktp,
+            maxScore: Number(exam.maxScore) || 100,
+            participantCount: examResults.length,
+            remedialNeededCount: examResults.filter((r: any) => (Number(r.finalScore) || 0) < kktp).length,
+            remedialAssignedCount: examRems.length,
+            remedialCompletedCount: examRems.filter((rem: any) => rem.status === 'completed').length,
+          };
+        })
+        .filter(Boolean) as any[];
+
+      const selectedExamId =
+        requestedExamId && completedExams.some((e: any) => e.id === requestedExamId)
+          ? requestedExamId
+          : completedExams[0]?.id || '';
+
+      const selectedExamObj = selectedExamId
+        ? exams.find((e: any) => e.id === selectedExamId) || null
+        : null;
+
+      if (!selectedExamObj) {
+        return {
+          completedExams,
+          selectedExam: null,
+          students: [],
+          summary: {
+            totalParticipants: 0,
+            passedCount: 0,
+            remedialCount: 0,
+            generatedCount: 0,
+            completedRemedialCount: 0,
+            passedAfterRemedialCount: 0,
+          },
+        };
+      }
+
+      const kktpScore = Number(selectedExamObj.kktpScore) || 75;
+      const maxScore = Number(selectedExamObj.maxScore) || 100;
+      const remByKey = new Map<string, any>(allRemedials.map((rem) => [rem.id, rem]));
+
+      const examResults = allResults
+        .filter((r: any) => r.examId === selectedExamId)
+        .sort((a: any, b: any) => (Number(a.finalScore) || 0) - (Number(b.finalScore) || 0));
+
+      const students = examResults.map((r: any) => {
+        const remKey = `${selectedExamId}_${r.studentId}`;
+        const rem = remByKey.get(remKey) || null;
+        const originalScore = Number(r.finalScore) || 0;
+        const isPassedOriginal = originalScore >= kktpScore;
+        const wrongDetails = extractWrongQuestionDetails(r, allQuestions);
+
+        const wrongSubchapterNames = Array.from(
+          new Set(
+            wrongDetails
+              .map((w) => (w.subchapterId ? subchapterMap.get(String(w.subchapterId)) : ''))
+              .filter(Boolean)
+          )
+        ) as string[];
+
+        const wrongCompetencyCodes = Array.from(
+          new Set(
+            wrongDetails
+              .map((w) => (w.competencyId ? compMap.get(String(w.competencyId)) : ''))
+              .filter(Boolean)
+          )
+        ) as string[];
+
+        const effectiveScore =
+          rem && rem.status === 'completed' && typeof rem.finalCappedScore === 'number'
+            ? rem.finalCappedScore
+            : originalScore;
+        const effectivePassed = effectiveScore >= kktpScore;
+
+        const normalizedRem = rem
+          ? rem.durationSeconds
+            ? rem
+            : {
+                ...rem,
+                ...computeRemedialDuration({
+                  examDurationMinutes: Number(selectedExamObj.durationMinutes) || 60,
+                  examTotalQuestions:
+                    Number(r.totalQuestions) ||
+                    Number(rem.originalTotalQuestions) ||
+                    (Array.isArray(rem.questionIds) ? rem.questionIds.length : 1),
+                  remedialQuestionCount: Array.isArray(rem.questionIds) ? rem.questionIds.length : 1,
+                }),
+              }
+          : null;
+
+        return {
+          studentId: r.studentId,
+          studentName: r.studentName || '-',
+          studentNis: r.studentNis || '-',
+          className: r.className || '-',
+          originalScore,
+          kktpScore,
+          isPassedOriginal,
+          correctCount: Number(r.correctCount) || 0,
+          wrongCount: Number(r.wrongCount) || 0,
+          emptyCount: Number(r.emptyCount) || 0,
+          totalQuestions: Number(r.totalQuestions) || 0,
+          wrongSubchapterNames,
+          wrongCompetencyCodes,
+          remedial: normalizedRem,
+          effectiveScore,
+          effectivePassed,
+        };
+      });
+
+      const summary = {
+        totalParticipants: students.length,
+        passedCount: students.filter((s) => s.isPassedOriginal).length,
+        remedialCount: students.filter((s) => !s.isPassedOriginal).length,
+        generatedCount: students.filter((s) => Boolean(s.remedial)).length,
+        completedRemedialCount: students.filter((s) => s.remedial?.status === 'completed').length,
+        passedAfterRemedialCount: students.filter((s) => s.effectivePassed).length,
+      };
+
+      return {
+        completedExams,
+        selectedExam: {
+          id: selectedExamObj.id,
+          title: selectedExamObj.title,
+          subjectName: subjectMap.get(String(selectedExamObj.subjectId)) || 'Mata Pelajaran',
+          kktpScore,
+          maxScore,
+          durationMinutes: Number(selectedExamObj.durationMinutes) || 60,
+        },
+        students,
+        summary,
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
+  generateRemedials: async (payload: {
+    examId: string;
+    mode: RemedialMode;
+    studentIds?: string[];
+    durationMinutes?: number;
+    actorName?: string;
+    actorRole?: string;
+  }) => {
+    const path = 'remedial_assignments';
+    try {
+      const { examId, mode, studentIds, actorName, actorRole } = payload;
+      if (!examId) throw new DomainValidationError('Pilih paket ujian terlebih dahulu.');
+      if (mode !== 'same_wrong' && mode !== 'random_same_competency') {
+        throw new DomainValidationError('Mode soal remedial tidak valid.');
+      }
+
+      const [examSnap, resultsSnap, questionsSnap, taxSnap, existingRemSnap] = await Promise.all([
+        getDoc(doc(db, 'exams', examId)),
+        getDocs(query(collection(db, 'exam_results'), where('examId', '==', examId))),
+        getDocs(collection(db, 'questions')),
+        getDocs(query(collection(db, 'taxonomy'), where('type', '==', 'subject'))),
+        getDocs(query(collection(db, 'remedial_assignments'), where('sourceExamId', '==', examId))),
+      ]);
+
+      if (!examSnap.exists()) throw new DomainValidationError('Paket ujian tidak ditemukan.');
+      const exam = { id: examSnap.id, ...(examSnap.data() as any) };
+      const kktpScore = Number(exam.kktpScore) || 75;
+      const maxScore = Number(exam.maxScore) || 100;
+      const examDurationMinutes = Number(exam.durationMinutes) || 60;
+      const subjectDoc = taxSnap.docs.find((s) => (s.data() as any).id === exam.subjectId || s.id === `subject-${exam.subjectId}`);
+      const subjectName = (subjectDoc?.data() as any)?.name || 'Mata Pelajaran';
+
+      const existingById = new Map<string, any>();
+      for (const rDoc of existingRemSnap.docs) {
+        existingById.set(rDoc.id, rDoc.data());
+      }
+
+      const allQuestions = questionsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const allTargetResults = resultsSnap.docs
+        .map((d) => d.data() as any)
+        .filter((r) => {
+          if ((Number(r.finalScore) || 0) >= kktpScore) return false;
+          if (Array.isArray(studentIds) && studentIds.length > 0) {
+            return studentIds.includes(r.studentId);
+          }
+          return true;
+        });
+
+      if (allTargetResults.length === 0) {
+        throw new DomainValidationError('Tidak ada murid dengan nilai di bawah KKM untuk dibuatkan soal remedial.');
+      }
+
+      let alreadyPassedCount = 0;
+      let activePendingCount = 0;
+      const targetResults = allTargetResults.filter((r) => {
+        const remId = `${examId}_${r.studentId}`;
+        const existing = existingById.get(remId);
+        if (!existing) return true;
+        if (existing.status === 'completed' && existing.isPassed) {
+          alreadyPassedCount++;
+          return false;
+        }
+        if (existing.status === 'assigned' || existing.status === 'in_progress') {
+          activePendingCount++;
+          return false;
+        }
+        return true;
+      });
+
+      if (targetResults.length === 0) {
+        if (activePendingCount > 0 && alreadyPassedCount === 0) {
+          throw new DomainValidationError(
+            'Jadwal remedial hanya untuk 1x pengerjaan. Murid yang dipilih masih memiliki jadwal aktif yang belum diselesaikan.'
+          );
+        }
+        if (alreadyPassedCount > 0 && activePendingCount === 0) {
+          throw new DomainValidationError(
+            'Murid yang dipilih sudah Tuntas Remedial dan tidak perlu dijadwalkan kembali.'
+          );
+        }
+        throw new DomainValidationError(
+          'Tidak ada murid yang memenuhi syarat penjadwalan remedial saat ini (pastikan remedial sebelumnya sudah selesai dan belum lulus).'
+        );
+      }
+
+      const nowIso = new Date().toISOString();
+      const generatedAssignments: any[] = [];
+
+      for (const r of targetResults) {
+        const remId = `${examId}_${r.studentId}`;
+        const existing = existingById.get(remId) || null;
+        const isReschedule = Boolean(existing && existing.status === 'completed' && !existing.isPassed);
+        const prevHistory = Array.isArray(existing?.attemptHistory) ? [...existing.attemptHistory] : [];
+        if (isReschedule && existing) {
+          prevHistory.push({
+            attempt: Number(existing.attemptCount) || 1,
+            mode: existing.mode,
+            questionCount: Array.isArray(existing.questionIds) ? existing.questionIds.length : 0,
+            correctCount: Number(existing.remedialCorrectCount) || 0,
+            wrongCount: Number(existing.remedialWrongCount) || 0,
+            emptyCount: Number(existing.remedialEmptyCount) || 0,
+            finalCappedScore: Number(existing.finalCappedScore) || Number(existing.baseScore) || 0,
+            isPassed: false,
+            completedAt: existing.completedAt || existing.updatedAt || nowIso,
+          });
+        }
+        const nextAttemptCount = isReschedule ? (Number(existing?.attemptCount) || 1) + 1 : 1;
+        const requiredCount =
+          isReschedule && Array.isArray(existing?.questionIds) && existing.questionIds.length > 0
+            ? existing.questionIds.length
+            : undefined;
+        const previousQuestionIds =
+          isReschedule && Array.isArray(existing?.questionIds) ? existing.questionIds : undefined;
+
+        const wrongQuestions = extractWrongQuestionDetails(r, allQuestions);
+        const { questionIds, fallbackUsedCount } = selectRemedialQuestions({
+          mode,
+          wrongQuestions,
+          originalQuestionDetails: Array.isArray(r.questionDetails) ? r.questionDetails : [],
+          allQuestions,
+          examSubjectId: exam.subjectId || '',
+          requiredCount,
+          previousQuestionIds,
+        });
+
+        if (questionIds.length === 0) continue;
+
+        const baseScore = Number(r.finalScore) || 0;
+        const originalTotalQuestions =
+          Number(r.totalQuestions) ||
+          (Array.isArray(r.questionDetails) ? r.questionDetails.length : 0) ||
+          Number(exam.cognitiveTarget?.totalQuestions) ||
+          questionIds.length;
+        const pointsPerCorrect = computePointsPerCorrectForRemedial({
+          baseScore,
+          kktpScore,
+          maxScore,
+          originalTotalQuestions,
+          remedialQuestionCount: questionIds.length,
+        });
+        const { durationMinutes: remDurationMinutes, durationSeconds: remDurationSeconds } =
+          computeRemedialDuration({
+            examDurationMinutes,
+            examTotalQuestions: originalTotalQuestions,
+            remedialQuestionCount: questionIds.length,
+          });
+
+        const assignment = stripUndefinedDeep({
+          id: remId,
+          sourceExamId: examId,
+          sourceExamTitle: exam.title,
+          subjectId: exam.subjectId || '',
+          subjectName,
+          studentId: r.studentId,
+          studentName: r.studentName || '-',
+          studentNis: r.studentNis || '-',
+          className: r.className || '-',
+          mode,
+          questionIds,
+          wrongQuestions,
+          originalTotalQuestions,
+          baseScore,
+          kktpScore,
+          maxScore,
+          pointsPerCorrect,
+          durationMinutes: remDurationMinutes,
+          durationSeconds: remDurationSeconds,
+          attemptCount: nextAttemptCount,
+          attemptHistory: prevHistory,
+          status: 'assigned',
+          remedialCorrectCount: null,
+          remedialWrongCount: null,
+          remedialEmptyCount: null,
+          addedScore: null,
+          finalCappedScore: null,
+          isPassed: false,
+          completedAt: null,
+          fallbackUsedCount,
+          createdAt: existing?.createdAt || nowIso,
+          updatedAt: nowIso,
+        });
+
+        await setDoc(doc(db, 'remedial_assignments', remId), assignment);
+        const remSessionKey = `rem_${examId}_${r.studentId}`;
+        await deleteDoc(doc(db, 'exam_sessions', remSessionKey)).catch(() => {});
+        generatedAssignments.push(assignment);
+      }
+
+      const modeLabel =
+        mode === 'same_wrong'
+          ? 'Soal Sama (Salah Dikerjakan)'
+          : 'Soal Random (Jumlah & Sub-Sub-Bab Sama)';
+
+      const logId = `log-${Date.now()}`;
+      await setDoc(doc(db, 'activity_logs', logId), {
+        id: logId,
+        timestamp: nowIso,
+        actorName: actorName || 'Guru / Admin',
+        role: actorRole || 'teacher',
+        action: 'GENERATE_REMEDIAL',
+        details: `Generate remedial "${exam.title}" untuk ${generatedAssignments.length} murid (${modeLabel})`,
+      }).catch(() => {});
+
+      return {
+        success: true,
+        count: generatedAssignments.length,
+        assignments: generatedAssignments,
+        message: `Berhasil membuat soal remedial untuk ${generatedAssignments.length} murid (${modeLabel}).`,
+      };
+    } catch (error) {
+      if (error instanceof DomainValidationError) throw error;
+      handleFirestoreError(error, OperationType.WRITE, path);
     }
   },
 

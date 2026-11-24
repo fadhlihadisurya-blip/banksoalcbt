@@ -11,6 +11,7 @@ import { ExamGeneratorModal } from './components/generator/ExamGeneratorModal';
 import { TokenManagerModal } from './components/token/TokenManagerModal';
 import { LiveMonitoringView } from './components/monitoring/LiveMonitoringView';
 import { ExamResultsView } from './components/results/ExamResultsView';
+import { RemedialView } from './components/results/RemedialView';
 import { AnbusoView } from './components/analytics/AnbusoView';
 import { ClassManagementView } from './components/admin/ClassManagementView';
 import { UserManagementView } from './components/admin/UserManagementView';
@@ -177,6 +178,8 @@ function MainApp() {
               initialExamId={selectedExamId || monitoringExamId}
             />
           );
+        case 'remedial':
+          return <RemedialView initialExamId={selectedExamId || monitoringExamId} />;
         case 'anbuso':
           return <AnbusoView initialExamId={selectedExamId || monitoringExamId} />;
         default:
@@ -228,6 +231,12 @@ function MainApp() {
             <ExamResultsView
               initialExamId={selectedExamId || monitoringExamId}
             />
+          ) : (
+            renderTeacherDashboard()
+          );
+        case 'remedial':
+          return teacherMenus.remedial ? (
+            <RemedialView initialExamId={selectedExamId || monitoringExamId} />
           ) : (
             renderTeacherDashboard()
           );

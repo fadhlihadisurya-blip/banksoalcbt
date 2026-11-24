@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { api } from '../../lib/api';
 import { useSettings } from '../../context/SettingsContext';
-import { Users, School, Database, FileQuestion, Activity, ArrowUpRight } from 'lucide-react';
+import {
+  Users,
+  School,
+  Database,
+  FileQuestion,
+  Activity,
+  ArrowUpRight,
+  LogIn,
+  LogOut,
+  RefreshCw,
+} from 'lucide-react';
 import { NavTab } from '../layout/AppLayout';
 
 interface AdminDashboardProps {
@@ -28,10 +40,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     totalExams: 0,
   });
   const [logs, setLogs] = useState<ActivityLogItem[]>([]);
+  const [logFilter, setLogFilter] = useState<'all' | 'auth' | 'system'>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadData();
+
+    const unsub = onSnapshot(
+      collection(db, 'activity_logs'),
+      (snap) => {
+        const realtimeLogs = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<ActivityLogItem, 'id'>) }))
+          .sort(
+            (a, b) =>
+              new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+          );
+        setLogs(realtimeLogs.slice(0, 30));
+      },
+      (err) => {
+        console.warn('[AdminDashboard] Realtime logs warning:', err);
+      }
+    );
+
+    return () => unsub();
   }, []);
 
   const loadData = async () => {
@@ -54,7 +85,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         totalQuestions: questionsRes.questions?.length || 0,
         totalExams: examsRes.exams?.length || 0,
       });
-      setLogs((logsRes.logs || []).slice(0, 5));
+      setLogs((logsRes.logs || []).slice(0, 30));
     } catch (err) {
       console.error(err);
     } finally {
@@ -164,14 +195,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         })}
       </div>
 
-      {/* System Integrity & Fast Monitoring Access */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Aktivitas & Log Sistem Terbaru</h3>
-              <p className="text-xs text-slate-500">Pencatatan sesi ujian, pembuatan token, dan audit pengawasan dari Firestore</p>
+      {/* Activity & System Logs */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Aktivitas & Log Sistem Terbaru</h3>
+            <p className="text-xs text-slate-500">
+              Pencatatan riwayat login/logout guru & admin, pembuatan ujian, dan aktivitas sistem dari Firestore
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setLogFilter('all')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  logFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter('auth')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  logFilter === 'auth' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Login & Logout
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter('system')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  logFilter === 'system' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Aktivitas Ujian
+              </button>
             </div>
+            <button
+              type="button"
+              onClick={loadData}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+              title="Muat ulang log"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={() => onNavigate('monitoring')}
               className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
@@ -179,75 +249,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               Buka Live Monitoring
             </button>
           </div>
+        </div>
 
-          <div className="mt-4 space-y-3">
-            {loading ? (
-              <div className="py-8 text-center text-xs text-slate-400">Memuat log aktivitas...</div>
-            ) : logs.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                Belum ada log aktivitas sistem yang tercatat di Firestore.
-              </div>
-            ) : (
-              logs.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg text-xs">
-                  <Activity className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-slate-800">{log.action} · {log.actorName}</span>
+        <div className="mt-4 space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+          {(() => {
+            const visibleLogs = logs.filter((log) => {
+              const isAuthLog = log.action === 'LOGIN' || log.action === 'LOGOUT';
+              if (logFilter === 'auth') return isAuthLog;
+              if (logFilter === 'system') return !isAuthLog;
+              return true;
+            });
+
+            if (loading && logs.length === 0) {
+              return <div className="py-8 text-center text-xs text-slate-400">Memuat log aktivitas...</div>;
+            }
+
+            if (visibleLogs.length === 0) {
+              return (
+                <div className="py-8 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                  Belum ada log aktivitas yang tercatat pada kategori ini.
+                </div>
+              );
+            }
+
+            return visibleLogs.map((log) => {
+              const isLogin = log.action === 'LOGIN';
+              const isLogout = log.action === 'LOGOUT';
+              const roleLabel =
+                log.role === 'admin' ? 'Admin' : log.role === 'teacher' ? 'Guru' : log.role || 'Sistem';
+              const actionLabel = isLogin ? 'Login' : isLogout ? 'Logout' : log.action;
+
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs"
+                >
+                  {isLogin ? (
+                    <LogIn className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                  ) : isLogout ? (
+                    <LogOut className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  ) : (
+                    <Activity className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            isLogin
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isLogout
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
+                          {actionLabel}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            log.role === 'admin'
+                              ? 'bg-slate-200 text-slate-800'
+                              : 'bg-sky-100 text-sky-800'
+                          }`}
+                        >
+                          {roleLabel}
+                        </span>
+                        <span className="font-semibold text-slate-900">{log.actorName}</span>
+                      </div>
                       <span className="text-slate-400 font-mono text-[11px]">
                         {log.timestamp ? new Date(log.timestamp).toLocaleString('id-ID') : ''}
                       </span>
                     </div>
-                    <p className="text-slate-600 mt-0.5">{log.details}</p>
+                    <p className="text-slate-600 mt-1">{log.details}</p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Security Summary Card */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Spesifikasi Server & Keamanan</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Integritas data ujian di tingkat sekolah</p>
-
-            <div className="mt-4 space-y-2.5 text-xs">
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Database Cloud</span>
-                <span className="font-medium text-emerald-600">Firebase Firestore (Terhubung)</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Autentikasi Admin</span>
-                <span className="font-medium text-emerald-600">Firebase Provider (Email/Password)</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Kunci Jawaban</span>
-                <span className="font-medium text-emerald-600">Tersimpan di Backend (Aman)</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Randomisasi Soal</span>
-                <span className="font-medium text-slate-900">Unik per Peserta</span>
-              </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Mesin AI Analytics</span>
-                <span className="font-medium text-indigo-600">Gemini 3.8 Flash (Server-Side)</span>
-              </div>
-              <div className="flex justify-between py-1.5">
-                <span className="text-slate-500">Proteksi Sesi Ganda</span>
-                <span className="font-medium text-slate-900">Terkunci per NIS</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-100">
-            <button
-              onClick={() => onNavigate('monitoring')}
-              className="w-full py-2 px-3 text-xs font-semibold text-center text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              Buka Ruang Pengawas Ujian
-            </button>
-          </div>
+              );
+            });
+          })()}
         </div>
       </div>
     </div>

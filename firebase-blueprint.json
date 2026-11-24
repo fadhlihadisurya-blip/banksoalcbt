@@ -140,10 +140,55 @@
             "exams": { "type": "boolean" },
             "monitoring": { "type": "boolean" },
             "results": { "type": "boolean" },
+            "remedial": { "type": "boolean" },
             "anbuso": { "type": "boolean" }
           }
-        }
+        },
+        "showDeleteExamAction": { "type": "boolean" }
       }
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "System and authentication activity log (teacher/admin login, logout, and exam events)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "actorName": { "type": "string" },
+        "role": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "actorName", "role", "action", "details"]
+    },
+    "RemedialAssignment": {
+      "title": "RemedialAssignment",
+      "description": "Generated remedial exam assignment and KKM-capped scoring state per student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sourceExamId": { "type": "string" },
+        "sourceExamTitle": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentNis": { "type": "string" },
+        "className": { "type": "string" },
+        "mode": { "type": "string", "enum": ["same_wrong", "random_same_competency"] },
+        "baseScore": { "type": "number" },
+        "kktpScore": { "type": "number" },
+        "pointsPerCorrect": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "attemptCount": { "type": "number" },
+        "attemptHistory": { "type": "array" },
+        "status": { "type": "string", "enum": ["assigned", "in_progress", "completed"] },
+        "addedScore": { "type": "number" },
+        "finalCappedScore": { "type": "number" },
+        "isPassed": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "sourceExamId", "studentId", "mode", "baseScore", "kktpScore", "status"]
     }
   },
   "firestore": {
@@ -174,6 +219,14 @@
     "/settings/{docId}": {
       "schema": { "$ref": "entities.SchoolSettings" },
       "description": "School branding and teacher menu visibility configuration"
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "entities.ActivityLog" },
+      "description": "Audit log of teacher/admin login/logout and system actions"
+    },
+    "/remedial_assignments/{assignmentId}": {
+      "schema": { "$ref": "entities.RemedialAssignment" },
+      "description": "Generated remedial exam question packages and KKM-capped scores per student"
     }
   }
 }

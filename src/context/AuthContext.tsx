@@ -107,6 +107,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(mappedUser);
       localStorage.setItem('cbt_user_session', JSON.stringify(mappedUser));
+      await api
+        .recordActivityLog({
+          actorName: mappedUser.name || mappedUser.username,
+          role: mappedUser.role,
+          action: 'LOGIN',
+          details: `${mappedUser.role === 'admin' ? 'Admin' : 'Guru'} (${mappedUser.email || mappedUser.username}) masuk ke portal`,
+        })
+        .catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -148,12 +156,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(mappedUser);
       localStorage.setItem('cbt_user_session', JSON.stringify(mappedUser));
+      await api
+        .recordActivityLog({
+          actorName: mappedUser.name || mappedUser.username,
+          role: mappedUser.role,
+          action: 'LOGIN',
+          details: `${mappedUser.role === 'admin' ? 'Admin' : 'Guru'} (${mappedUser.email || mappedUser.username}) masuk ke portal`,
+        })
+        .catch(() => {});
     } finally {
       setLoading(false);
     }
   };
 
   const logout = async () => {
+    const currentUser = user;
+    if (currentUser && (currentUser.role === 'teacher' || currentUser.role === 'admin')) {
+      const roleLabel = currentUser.role === 'admin' ? 'Admin' : 'Guru';
+      await api
+        .recordActivityLog({
+          actorName: currentUser.name || currentUser.username,
+          role: currentUser.role,
+          action: 'LOGOUT',
+          details: `${roleLabel} (${currentUser.username || currentUser.email}) keluar dari portal`,
+        })
+        .catch(() => {});
+    }
     await logoutFirebase();
     setUser(null);
     localStorage.removeItem('cbt_user_session');

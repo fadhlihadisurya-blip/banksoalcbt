@@ -18,6 +18,7 @@ import {
   Activity,
   Award,
   ClipboardCheck,
+  Trash2,
 } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
 import {
@@ -121,6 +122,12 @@ const TEACHER_MENU_ITEMS: Array<{
     icon: Award,
   },
   {
+    key: 'remedial',
+    label: 'Remedial',
+    description: 'Pantau murid di bawah KKM dan buat paket soal remedial otomatis.',
+    icon: RotateCcw,
+  },
+  {
     key: 'anbuso',
     label: 'Anbuso',
     description: 'Analisis butir soal (Discrimination, Difficulty, Distractor, Reliabilitas).',
@@ -137,12 +144,14 @@ export const SchoolSettingsView: React.FC = () => {
     loginBackgroundUrl: string;
     appSubtitle: string;
     teacherMenus: TeacherMenuVisibility;
+    showDeleteExamAction: boolean;
   }>({
     schoolName: settings.schoolName || 'SMAN 1 PRESTASI BANGSA',
     schoolLogoUrl: settings.schoolLogoUrl || '',
     loginBackgroundUrl: settings.loginBackgroundUrl || '',
     appSubtitle: settings.appSubtitle || 'CBT Portal · TP 2024/2025 Genap',
     teacherMenus: normalizeTeacherMenus(settings.teacherMenus),
+    showDeleteExamAction: settings.showDeleteExamAction !== false,
   });
 
   const [saving, setSaving] = useState(false);
@@ -157,6 +166,7 @@ export const SchoolSettingsView: React.FC = () => {
       loginBackgroundUrl: settings.loginBackgroundUrl || '',
       appSubtitle: settings.appSubtitle || 'CBT Portal · TP 2024/2025 Genap',
       teacherMenus: normalizeTeacherMenus(settings.teacherMenus),
+      showDeleteExamAction: settings.showDeleteExamAction !== false,
     });
   }, [
     settings.schoolName,
@@ -164,6 +174,7 @@ export const SchoolSettingsView: React.FC = () => {
     settings.loginBackgroundUrl,
     settings.appSubtitle,
     settings.teacherMenus,
+    settings.showDeleteExamAction,
   ]);
 
   const handleToggleTeacherMenu = (key: TeacherMenuKey) => {
@@ -187,6 +198,7 @@ export const SchoolSettingsView: React.FC = () => {
         exams: visible,
         monitoring: visible,
         results: visible,
+        remedial: visible,
         anbuso: visible,
       },
     }));
@@ -260,6 +272,7 @@ export const SchoolSettingsView: React.FC = () => {
       loginBackgroundUrl: '',
       appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
       teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+      showDeleteExamAction: true,
     };
     setFormState(defaults);
     setConfirmResetOpen(false);
@@ -625,23 +638,26 @@ export const SchoolSettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* SECTION 4: VISIBILITAS MENU AKUN GURU */}
+        {/* SECTION 4: VISIBILITAS MENU AKUN GURU & AKSI UJIAN */}
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
                 <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
-                <span>4. Pengaturan Visibilitas Menu Akun Guru</span>
+                <span>4. Pengaturan Visibilitas Menu Guru & Aksi Ujian</span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Pilih menu yang ditampilkan pada navigasi akun guru ({enabledTeacherMenuCount} dari {TEACHER_MENU_ITEMS.length} menu aktif).
+                Pilih menu yang ditampilkan pada navigasi akun guru ({enabledTeacherMenuCount} dari {TEACHER_MENU_ITEMS.length} menu aktif) serta kontrol aksi hapus paket ujian.
               </p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => handleSetAllTeacherMenus(true)}
+                onClick={() => {
+                  handleSetAllTeacherMenus(true);
+                  setFormState((prev) => ({ ...prev, showDeleteExamAction: true }));
+                }}
                 className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
               >
                 Tampilkan Semua
@@ -652,6 +668,7 @@ export const SchoolSettingsView: React.FC = () => {
                   setFormState((prev) => ({
                     ...prev,
                     teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+                    showDeleteExamAction: true,
                   }))
                 }
                 className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors"
@@ -711,6 +728,58 @@ export const SchoolSettingsView: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+
+          <div className="pt-3 border-t border-slate-100">
+            <div
+              className={`p-3.5 rounded-xl border transition-colors flex items-center justify-between gap-3 ${
+                formState.showDeleteExamAction
+                  ? 'bg-rose-50/40 border-rose-200'
+                  : 'bg-slate-50/80 border-slate-200'
+              }`}
+            >
+              <div className="flex items-start gap-3 min-w-0">
+                <div
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    formState.showDeleteExamAction
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-900">
+                    Tampilkan Aksi Hapus Paket Ujian
+                  </div>
+                  <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                    Menampilkan atau menyembunyikan tombol hapus paket ujian pada tabel Daftar Paket Ujian Sekolah (berlaku untuk akun Guru dan Admin).
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={formState.showDeleteExamAction}
+                aria-label="Toggle aksi hapus paket ujian"
+                onClick={() =>
+                  setFormState((prev) => ({
+                    ...prev,
+                    showDeleteExamAction: !prev.showDeleteExamAction,
+                  }))
+                }
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
+                  formState.showDeleteExamAction ? 'bg-indigo-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition duration-200 ${
+                    formState.showDeleteExamAction ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
 

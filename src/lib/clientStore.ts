@@ -24,6 +24,7 @@ const EMPTY_DB = {
     appSubtitle: '',
     academicYearText: '2024/2025 Genap',
     teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+    showDeleteExamAction: true,
   },
   activityLogs: [],
 };
@@ -254,6 +255,18 @@ export const clientStore = {
           password: cleanPass,
           lastLogin: new Date().toISOString(),
         }).catch(() => {});
+      }
+
+      if (match.role === 'teacher' || match.role === 'admin') {
+        const roleLabel = match.role === 'admin' ? 'Admin' : 'Guru';
+        await firestoreStore
+          .recordActivityLog({
+            actorName: match.name || match.username,
+            role: match.role,
+            action: 'LOGIN',
+            details: `${roleLabel} (${match.username}) masuk ke portal`,
+          })
+          .catch(() => {});
       }
 
       const safeMatch = { ...match };
@@ -495,9 +508,28 @@ export const clientStore = {
     }
 
     // 8. Activity Logs: /activity-logs
-    if (cleanPath === '/activity-logs' && method === 'GET') {
-      const fsRes = await firestoreStore.getActivityLogs();
-      return (fsRes || { logs: [] }) as unknown as T;
+    if (cleanPath === '/activity-logs') {
+      if (method === 'GET') {
+        const fsRes = await firestoreStore.getActivityLogs();
+        return (fsRes || { logs: [] }) as unknown as T;
+      }
+      if (method === 'POST') {
+        const fsRes = await firestoreStore.recordActivityLog(body);
+        return (fsRes || { success: true }) as unknown as T;
+      }
+    }
+
+    // 9. Remedial: /remedial
+    if (cleanPath === '/remedial' && method === 'GET') {
+      const params = new URLSearchParams(queryString || '');
+      const examId = params.get('examId') || undefined;
+      const fsRes = await firestoreStore.getRemedialOverview(examId);
+      return fsRes as unknown as T;
+    }
+
+    if (cleanPath === '/remedial/generate' && method === 'POST') {
+      const fsRes = await firestoreStore.generateRemedials(body || {});
+      return fsRes as unknown as T;
     }
 
     return {} as T;

@@ -172,6 +172,14 @@ export interface StudentExamInfo {
   score: number | null;
   kktpScore: number;
   violationCount?: number;
+  isRemedial?: boolean;
+  sourceExamId?: string;
+  remedialMode?: RemedialMode;
+  baseScore?: number;
+  addedScore?: number;
+  remedialQuestionCount?: number;
+  attemptCount?: number;
+  isRemedialPassed?: boolean;
 }
 
 export interface ViolationEntry {
@@ -270,6 +278,8 @@ export interface ExamResultItem {
   completedAt: string;
   finalScore: number;
   isPassed: boolean;
+  isRemedialPassed?: boolean;
+  kktpStatusLabel?: string;
   kktpScore: number;
   correctCount: number;
   wrongCount: number;
@@ -295,6 +305,12 @@ export interface StudentResultItem {
   totalQuestions: number;
   isPublishedResults: boolean;
   finalScore: number | null;
+  isRemedial?: boolean;
+  baseScore?: number;
+  addedScore?: number;
+  kktpScore?: number;
+  attemptCount?: number;
+  isRemedialPassed?: boolean;
 }
 
 export interface StudentResultsPayload {
@@ -340,6 +356,115 @@ export interface AIClassicalAnalytics {
   teacherActionPlan: string[];
 }
 
+export type RemedialMode = 'same_wrong' | 'random_same_competency';
+
+export interface RemedialWrongQuestionMeta {
+  questionId: string;
+  questionCode?: string;
+  competencyId?: string | null;
+  subchapterId?: string | null;
+  chapterId?: string | null;
+  cognitiveLevel?: CognitiveLevel;
+  maxPoints?: number;
+}
+
+export interface RemedialAttemptRecord {
+  attempt: number;
+  mode: RemedialMode;
+  questionCount: number;
+  correctCount: number;
+  wrongCount: number;
+  emptyCount: number;
+  finalCappedScore: number;
+  isPassed: boolean;
+  completedAt: string;
+}
+
+export interface RemedialAssignment {
+  id: string;
+  sourceExamId: string;
+  sourceExamTitle: string;
+  subjectId: string;
+  subjectName?: string;
+  studentId: string;
+  studentName: string;
+  studentNis: string;
+  className: string;
+  mode: RemedialMode;
+  questionIds: string[];
+  wrongQuestions?: RemedialWrongQuestionMeta[];
+  originalTotalQuestions: number;
+  baseScore: number;
+  kktpScore: number;
+  maxScore: number;
+  pointsPerCorrect: number;
+  durationMinutes: number;
+  durationSeconds?: number;
+  attemptCount?: number;
+  attemptHistory?: RemedialAttemptRecord[];
+  status: 'assigned' | 'in_progress' | 'completed';
+  remedialCorrectCount?: number;
+  remedialWrongCount?: number;
+  remedialEmptyCount?: number;
+  addedScore?: number;
+  finalCappedScore?: number;
+  isPassed?: boolean;
+  fallbackUsedCount?: number;
+  createdAt: string;
+  updatedAt?: string;
+  completedAt?: string;
+}
+
+export interface RemedialExamStudentRow {
+  studentId: string;
+  studentName: string;
+  studentNis: string;
+  className: string;
+  originalScore: number;
+  kktpScore: number;
+  isPassedOriginal: boolean;
+  correctCount: number;
+  wrongCount: number;
+  emptyCount: number;
+  totalQuestions: number;
+  wrongSubchapterNames?: string[];
+  wrongCompetencyCodes?: string[];
+  remedial: RemedialAssignment | null;
+  effectiveScore: number;
+  effectivePassed: boolean;
+}
+
+export interface RemedialOverviewPayload {
+  completedExams: Array<{
+    id: string;
+    title: string;
+    subjectName: string;
+    kktpScore: number;
+    maxScore: number;
+    participantCount: number;
+    remedialNeededCount: number;
+    remedialAssignedCount: number;
+    remedialCompletedCount: number;
+  }>;
+  selectedExam: {
+    id: string;
+    title: string;
+    subjectName: string;
+    kktpScore: number;
+    maxScore: number;
+    durationMinutes: number;
+  } | null;
+  students: RemedialExamStudentRow[];
+  summary: {
+    totalParticipants: number;
+    passedCount: number;
+    remedialCount: number;
+    generatedCount: number;
+    completedRemedialCount: number;
+    passedAfterRemedialCount: number;
+  };
+}
+
 export type TeacherMenuKey =
   | 'classes'
   | 'users'
@@ -348,6 +473,7 @@ export type TeacherMenuKey =
   | 'exams'
   | 'monitoring'
   | 'results'
+  | 'remedial'
   | 'anbuso';
 
 export type TeacherMenuVisibility = Record<TeacherMenuKey, boolean>;
@@ -360,6 +486,7 @@ export const DEFAULT_TEACHER_MENUS: TeacherMenuVisibility = {
   exams: true,
   monitoring: true,
   results: true,
+  remedial: true,
   anbuso: true,
 };
 
@@ -372,6 +499,7 @@ export function normalizeTeacherMenus(raw?: Partial<Record<TeacherMenuKey, boole
     exams: raw?.exams !== undefined ? Boolean(raw.exams) : DEFAULT_TEACHER_MENUS.exams,
     monitoring: raw?.monitoring !== undefined ? Boolean(raw.monitoring) : DEFAULT_TEACHER_MENUS.monitoring,
     results: raw?.results !== undefined ? Boolean(raw.results) : DEFAULT_TEACHER_MENUS.results,
+    remedial: raw?.remedial !== undefined ? Boolean(raw.remedial) : DEFAULT_TEACHER_MENUS.remedial,
     anbuso: raw?.anbuso !== undefined ? Boolean(raw.anbuso) : DEFAULT_TEACHER_MENUS.anbuso,
   };
 }
@@ -383,5 +511,6 @@ export interface SchoolSettings {
   appSubtitle?: string;
   academicYearText?: string;
   teacherMenus?: TeacherMenuVisibility;
+  showDeleteExamAction?: boolean;
 }
 

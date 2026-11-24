@@ -204,7 +204,14 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
           { value: Number(r.wrongCount) || 0, style: 'center' },
           { value: Number(r.emptyCount) || 0, style: 'center' },
           { value: Number(r.finalScore) || 0, style: 'center' },
-          { value: r.isPassed ? 'Tuntas' : 'Remedial', style: 'center' },
+          {
+            value: r.isPassed
+              ? 'Tuntas'
+              : r.isRemedialPassed
+              ? 'Tuntas Remedial'
+              : 'Remedial',
+            style: 'center',
+          },
         ];
       });
 
@@ -384,7 +391,15 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
                         <td className="py-3 px-4 font-sans font-semibold text-slate-900">{r.studentName}</td>
                         <td className="py-3 px-4 text-slate-500">{r.studentNis}</td>
                         <td className="py-3 px-4 font-sans text-slate-700">{r.className}</td>
-                        <td className="py-3 px-4 font-sans font-medium text-slate-800">{r.examTitle}</td>
+                        <td className="py-3 px-4 font-sans font-medium text-slate-800">
+                          <div>{r.examTitle}</div>
+                          {r.isRemedial && (
+                            <div className="text-[10px] font-mono text-amber-700 mt-0.5">
+                              Percobaan ke-{r.attemptCount || 1} · Nilai Awal {r.baseScore ?? 0} + Remedial {r.addedScore ?? 0} (Maks KKM {r.kktpScore ?? 75}){' '}
+                              {r.isRemedialPassed ? '· Tuntas Remedial' : '· Belum Lulus'}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-center text-emerald-600 font-semibold">
                           {isHidden || r.correctCount === null ? (
                             <span className="text-slate-400 tracking-widest" title="Disembunyikan oleh Admin/Guru">
@@ -641,6 +656,10 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
                     <td className="py-3 px-4 text-center font-sans font-semibold">
                       {r.isPassed ? (
                         <span className="text-emerald-700">Tuntas</span>
+                      ) : r.isRemedialPassed ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 text-[11px] font-semibold">
+                          Tuntas Remedial
+                        </span>
                       ) : (
                         <span className="text-rose-600">Perlu Remedial</span>
                       )}

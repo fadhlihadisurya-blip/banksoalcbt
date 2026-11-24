@@ -284,12 +284,21 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
               return (
               <div
                 key={exam.id}
-                className="bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-all flex flex-col justify-between"
+                className={`bg-white border rounded-xl p-5 hover:border-slate-300 transition-all flex flex-col justify-between ${
+                  exam.isRemedial ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'
+                }`}
               >
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-                    <span className="font-semibold text-indigo-600">{exam.subject}</span>
-                    <span className="flex items-center gap-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-semibold text-indigo-600 truncate">{exam.subject}</span>
+                      {exam.isRemedial && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase shrink-0">
+                          Remedial · Percobaan ke-{exam.attemptCount || 1}
+                        </span>
+                      )}
+                    </div>
+                    <span className="flex items-center gap-1 shrink-0">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                       <span>{exam.durationMinutes} Menit</span>
                     </span>
@@ -300,20 +309,44 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                   </h4>
 
                   <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>
-                        Jadwal: <strong className="font-mono text-slate-700">{formatSchedule(exam.scheduleStart)}</strong> –{' '}
-                        <strong className="font-mono text-slate-700">{formatSchedule(exam.scheduleEnd)}</strong>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Award className="w-3.5 h-3.5 text-slate-400" />
-                      <span>KKTP Minimum: <strong className="font-mono">{exam.kktpScore || 75}</strong></span>
-                    </div>
+                    {exam.isRemedial ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                          <span>
+                            Jumlah Soal Remedial:{' '}
+                            <strong className="font-mono text-slate-800">
+                              {exam.remedialQuestionCount || 0} butir
+                            </strong>{' '}
+                            ({exam.remedialMode === 'same_wrong' ? 'Soal Salah Sebelumnya' : 'Soal Acak Sub-Sub-Bab'})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Award className="w-3.5 h-3.5 text-slate-400" />
+                          <span>
+                            Nilai Awal: <strong className="font-mono text-rose-600">{exam.baseScore ?? 0}</strong> · Batas Lulus Maks KKM:{' '}
+                            <strong className="font-mono text-emerald-700">{exam.kktpScore || 75}</strong> · <span className="font-semibold text-amber-700">1x Pengerjaan</span>
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>
+                            Jadwal: <strong className="font-mono text-slate-700">{formatSchedule(exam.scheduleStart)}</strong> –{' '}
+                            <strong className="font-mono text-slate-700">{formatSchedule(exam.scheduleEnd)}</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Award className="w-3.5 h-3.5 text-slate-400" />
+                          <span>KKTP Minimum: <strong className="font-mono">{exam.kktpScore || 75}</strong></span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex items-center gap-2">
                       <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Token Ujian: {exam.isTokenActive ? 'Wajib Dimasukkan' : 'Terbuka'}</span>
+                      <span>Token Ujian: {exam.isTokenActive ? 'Wajib Dimasukkan' : 'Terbuka (Tanpa Token)'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <ShieldAlert
@@ -336,10 +369,24 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                 <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <div>
                     {exam.studentStatus === 'completed' ? (
-                      <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
-                        <CheckCircle className="w-4 h-4 text-emerald-600" />
-                        <span>Selesai Dikerjakan</span>
-                      </span>
+                      exam.isRemedial ? (
+                        exam.isRemedialPassed ? (
+                          <span className="text-xs font-semibold text-teal-700 flex items-center gap-1">
+                            <CheckCircle className="w-4 h-4 text-teal-600" />
+                            <span>Tuntas Remedial</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs font-semibold text-rose-600 flex items-center gap-1">
+                            <ShieldAlert className="w-4 h-4 text-rose-500" />
+                            <span>Belum Lulus (Menunggu Jadwal Ulang)</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          <span>Selesai Dikerjakan</span>
+                        </span>
+                      )
                     ) : exam.studentStatus === 'in_progress' ? (
                       <span className="text-xs font-semibold text-amber-700 flex items-center gap-1">
                         <RotateCcw className="w-4 h-4 text-amber-600" />
@@ -354,9 +401,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onStartExam 
                     {exam.studentStatus === 'completed' ? (
                       exam.isPublishedResults ? (
                         <div className="text-right">
-                          <span className="text-xs text-slate-400 block">Nilai Anda:</span>
+                          <span className="text-xs text-slate-400 block">
+                            {exam.isRemedial ? 'Nilai Akhir (Maks KKM):' : 'Nilai Anda:'}
+                          </span>
                           <span className="text-lg font-bold font-mono text-indigo-600">
-                            {exam.score} / 100
+                            {exam.score} / {exam.isRemedial ? exam.kktpScore || 75 : 100}
                           </span>
                         </div>
                       ) : (
