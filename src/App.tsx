@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { SettingsProvider } from './context/SettingsContext';
+import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { AppLayout, NavTab } from './components/layout/AppLayout';
 import { LoginView } from './components/auth/LoginView';
 import { AdminDashboard } from './components/dashboard/AdminDashboard';
@@ -17,7 +17,13 @@ import { UserManagementView } from './components/admin/UserManagementView';
 import { TaxonomyManagementView } from './components/admin/TaxonomyManagementView';
 import { SchoolSettingsView } from './components/admin/SchoolSettingsView';
 import { ExamTakingView } from './components/exam/ExamTakingView';
-import { Exam, ExamSession, StudentQuestionItem } from './types/cbt';
+import {
+  Exam,
+  ExamSession,
+  StudentQuestionItem,
+  TeacherMenuKey,
+  normalizeTeacherMenus,
+} from './types/cbt';
 import { api } from './lib/api';
 import {
   incrementStudentClick,
@@ -27,7 +33,9 @@ import {
 
 function MainApp() {
   const { user, loading } = useAuth();
+  const { settings } = useSettings();
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const teacherMenus = normalizeTeacherMenus(settings.teacherMenus);
 
   // Exam Generator Modal
   const [showExamGenerator, setShowExamGenerator] = useState(false);
@@ -51,6 +59,16 @@ function MainApp() {
     questions: StudentQuestionItem[];
     examMeta: any;
   } | null>(null);
+
+  useEffect(() => {
+    if (user?.role === 'teacher' && currentTab !== 'dashboard') {
+      const isAllowed =
+        currentTab in teacherMenus && teacherMenus[currentTab as TeacherMenuKey];
+      if (!isAllowed) {
+        setCurrentTab('dashboard');
+      }
+    }
+  }, [user?.role, currentTab, teacherMenus]);
 
   useEffect(() => {
     if (user?.role !== 'student' || !user?.id) return;
@@ -167,74 +185,60 @@ function MainApp() {
     }
 
     if (user.role === 'teacher') {
+      const renderTeacherDashboard = () => (
+        <TeacherDashboard
+          refreshKey={examListRefreshKey}
+          onNavigate={(tab) => setCurrentTab(tab)}
+          onOpenExamGenerator={() => setShowExamGenerator(true)}
+          onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
+          onSelectExamForMonitoring={(id) => {
+            setMonitoringExamId(id);
+            if (teacherMenus.monitoring) setCurrentTab('monitoring');
+          }}
+          onSelectExamForResults={(id) => {
+            setSelectedExamId(id);
+          }}
+        />
+      );
+
       switch (currentTab) {
         case 'dashboard':
-          return (
-            <TeacherDashboard
-              refreshKey={examListRefreshKey}
-              onNavigate={(tab) => setCurrentTab(tab)}
-              onOpenExamGenerator={() => setShowExamGenerator(true)}
-              onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
-              onSelectExamForMonitoring={(id) => {
-                setMonitoringExamId(id);
-                setCurrentTab('monitoring');
-              }}
-              onSelectExamForResults={(id) => {
-                setSelectedExamId(id);
-              }}
-            />
-          );
+          return renderTeacherDashboard();
         case 'classes':
-          return <ClassManagementView />;
+          return teacherMenus.classes ? <ClassManagementView /> : renderTeacherDashboard();
+        case 'users':
+          return teacherMenus.users ? <UserManagementView /> : renderTeacherDashboard();
         case 'bank':
-          return <QuestionBankView />;
+          return teacherMenus.bank ? <QuestionBankView /> : renderTeacherDashboard();
+        case 'taxonomy':
+          return teacherMenus.taxonomy ? <TaxonomyManagementView /> : renderTeacherDashboard();
         case 'exams':
-          return (
-            <TeacherDashboard
-              refreshKey={examListRefreshKey}
-              onNavigate={(tab) => setCurrentTab(tab)}
-              onOpenExamGenerator={() => setShowExamGenerator(true)}
-              onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
-              onSelectExamForMonitoring={(id) => {
-                setMonitoringExamId(id);
-                setCurrentTab('monitoring');
-              }}
-              onSelectExamForResults={(id) => {
-                setSelectedExamId(id);
-              }}
-            />
-          );
+          return teacherMenus.exams ? renderTeacherDashboard() : renderTeacherDashboard();
         case 'monitoring':
-          return (
+          return teacherMenus.monitoring ? (
             <LiveMonitoringView
               selectedExamId={monitoringExamId}
               onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
             />
+          ) : (
+            renderTeacherDashboard()
           );
         case 'results':
-          return (
+          return teacherMenus.results ? (
             <ExamResultsView
               initialExamId={selectedExamId || monitoringExamId}
             />
+          ) : (
+            renderTeacherDashboard()
           );
         case 'anbuso':
-          return <AnbusoView initialExamId={selectedExamId || monitoringExamId} />;
-        default:
-          return (
-            <TeacherDashboard
-              refreshKey={examListRefreshKey}
-              onNavigate={(tab) => setCurrentTab(tab)}
-              onOpenExamGenerator={() => setShowExamGenerator(true)}
-              onOpenTokenModal={(exam) => setSelectedExamForToken(exam)}
-              onSelectExamForMonitoring={(id) => {
-                setMonitoringExamId(id);
-                setCurrentTab('monitoring');
-              }}
-              onSelectExamForResults={(id) => {
-                setSelectedExamId(id);
-              }}
-            />
+          return teacherMenus.anbuso ? (
+            <AnbusoView initialExamId={selectedExamId || monitoringExamId} />
+          ) : (
+            renderTeacherDashboard()
           );
+        default:
+          return renderTeacherDashboard();
       }
     }
 
@@ -260,7 +264,9 @@ function MainApp() {
           onClose={() => setShowExamGenerator(false)}
           onSuccess={() => {
             setExamListRefreshKey((k) => k + 1);
-            setCurrentTab('exams');
+            if (user.role === 'admin' || teacherMenus.exams) {
+              setCurrentTab('exams');
+            }
           }}
         />
       )}

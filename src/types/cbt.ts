@@ -340,11 +340,48 @@ export interface AIClassicalAnalytics {
   teacherActionPlan: string[];
 }
 
+export type TeacherMenuKey =
+  | 'classes'
+  | 'users'
+  | 'bank'
+  | 'taxonomy'
+  | 'exams'
+  | 'monitoring'
+  | 'results'
+  | 'anbuso';
+
+export type TeacherMenuVisibility = Record<TeacherMenuKey, boolean>;
+
+export const DEFAULT_TEACHER_MENUS: TeacherMenuVisibility = {
+  classes: true,
+  users: false,
+  bank: true,
+  taxonomy: false,
+  exams: true,
+  monitoring: true,
+  results: true,
+  anbuso: true,
+};
+
+export function normalizeTeacherMenus(raw?: Partial<Record<TeacherMenuKey, boolean>> | null): TeacherMenuVisibility {
+  return {
+    classes: raw?.classes !== undefined ? Boolean(raw.classes) : DEFAULT_TEACHER_MENUS.classes,
+    users: raw?.users !== undefined ? Boolean(raw.users) : DEFAULT_TEACHER_MENUS.users,
+    bank: raw?.bank !== undefined ? Boolean(raw.bank) : DEFAULT_TEACHER_MENUS.bank,
+    taxonomy: raw?.taxonomy !== undefined ? Boolean(raw.taxonomy) : DEFAULT_TEACHER_MENUS.taxonomy,
+    exams: raw?.exams !== undefined ? Boolean(raw.exams) : DEFAULT_TEACHER_MENUS.exams,
+    monitoring: raw?.monitoring !== undefined ? Boolean(raw.monitoring) : DEFAULT_TEACHER_MENUS.monitoring,
+    results: raw?.results !== undefined ? Boolean(raw.results) : DEFAULT_TEACHER_MENUS.results,
+    anbuso: raw?.anbuso !== undefined ? Boolean(raw.anbuso) : DEFAULT_TEACHER_MENUS.anbuso,
+  };
+}
+
 export interface SchoolSettings {
   schoolName: string;
   schoolLogoUrl: string;
   loginBackgroundUrl: string;
   appSubtitle?: string;
   academicYearText?: string;
+  teacherMenus?: TeacherMenuVisibility;
 }
 

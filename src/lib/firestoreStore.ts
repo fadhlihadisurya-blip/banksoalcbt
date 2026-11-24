@@ -17,9 +17,10 @@ import {
   getSubjectCodePrefix,
   isQuestionCodeDuplicate,
 } from './questionCode';
-import { generateRandomPassword } from './passwordUtils';
+import { generateRandomPassword, hashPasswordAsync } from './passwordUtils';
 import { computeLiveStudentScore } from './liveScore';
 import { isQuestionInExamScope, questionMatchesScopeUnit, evaluateScopeAvailability } from './examPool';
+import { DEFAULT_TEACHER_MENUS, normalizeTeacherMenus } from '../types/cbt';
 
 class DomainValidationError extends Error {}
 
@@ -57,6 +58,7 @@ const DEFAULT_SETTINGS = {
   loginBackgroundUrl: '',
   appSubtitle: '',
   academicYearText: '2024/2025 Genap',
+  teacherMenus: { ...DEFAULT_TEACHER_MENUS },
 };
 
 async function findTaxonomyDocRef(type: string, id: string) {
@@ -83,7 +85,14 @@ export const firestoreStore = {
     try {
       const snap = await getDoc(doc(db, 'settings', 'school_info'));
       if (snap.exists()) {
-        return { settings: { ...DEFAULT_SETTINGS, ...snap.data() } };
+        const data = snap.data() as any;
+        return {
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...data,
+            teacherMenus: normalizeTeacherMenus(data?.teacherMenus),
+          },
+        };
       }
       return { settings: DEFAULT_SETTINGS };
     } catch (error) {
@@ -96,13 +105,18 @@ export const firestoreStore = {
     try {
       const ref = doc(db, 'settings', 'school_info');
       const snap = await getDoc(ref);
-      const current = snap.exists() ? snap.data() : DEFAULT_SETTINGS;
-      const updated = {
+      const current = snap.exists() ? (snap.data() as any) : DEFAULT_SETTINGS;
+      const mergedMenus = normalizeTeacherMenus({
+        ...(current?.teacherMenus || {}),
+        ...(settingsData?.teacherMenus || {}),
+      });
+      const updated = stripUndefinedDeep({
         ...DEFAULT_SETTINGS,
         ...current,
         ...settingsData,
+        teacherMenus: mergedMenus,
         updatedAt: new Date().toISOString(),
-      };
+      });
       await setDoc(ref, updated, { merge: true });
       return { success: true, settings: updated, message: 'Pengaturan sekolah berhasil disimpan ke Firestore.' };
     } catch (error) {
@@ -190,9 +204,9 @@ export const firestoreStore = {
     try {
       const snap = await getDocs(collection(db, path));
       const users = snap.docs.map((d) => {
-        const u = d.data();
+        const u = { id: d.id, ...d.data() } as any;
         delete u.passwordHash;
-        if (u.role !== 'student') {
+        if (u.role === 'admin') {
           delete u.plainPassword;
         }
         return u;
@@ -203,29 +217,50 @@ export const firestoreStore = {
     }
   },
 
+  getUsersForAuth: async () => {
+    const path = 'users';
+    try {
+      const snap = await getDocs(collection(db, path));
+      const users = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+      return { users };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+  },
+
   createUser: async (userData: any) => {
     const path = 'users';
     try {
       const id = userData.id || `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const role = userData.role || 'student';
+      const defaultPass = role === 'teacher' ? 'guru123' : role === 'admin' ? 'admin123' : 'siswa123';
+      const rawPassword = String(userData.password || userData.plainPassword || defaultPass).trim();
+      const passwordHash = await hashPasswordAsync(rawPassword);
+
       const newUser: any = {
         id,
-        username: userData.username,
-        name: userData.name,
-        role: userData.role || 'student',
+        username: String(userData.username || '').trim(),
+        name: String(userData.name || '').trim(),
+        role,
         email: userData.email || '',
         isActive: userData.isActive !== false,
+        passwordCustom: Boolean(userData.password),
+        ...(passwordHash ? { passwordHash } : {}),
         createdAt: new Date().toISOString(),
       };
-      if (newUser.role === 'student') {
-        newUser.nis = userData.nis || userData.username;
+      if (role === 'student') {
+        newUser.nis = userData.nis || newUser.username;
         newUser.classId = userData.classId || '';
-        newUser.plainPassword = userData.password || userData.plainPassword || 'siswa123';
-      } else if (newUser.role === 'teacher') {
+        newUser.plainPassword = rawPassword;
+      } else if (role === 'teacher') {
         newUser.nip = userData.nip || '';
         newUser.subjectSpecialty = userData.subjectSpecialty || '';
+        newUser.plainPassword = rawPassword;
       }
-      await setDoc(doc(db, path, id), newUser);
-      return { success: true, user: newUser };
+      await setDoc(doc(db, path, id), stripUndefinedDeep(newUser));
+      const safe = { ...newUser };
+      delete safe.passwordHash;
+      return { success: true, user: safe };
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
@@ -235,6 +270,8 @@ export const firestoreStore = {
     const path = `users/${id}`;
     try {
       const ref = doc(db, 'users', id);
+      const curSnap = await getDoc(ref);
+      const currentRole = userData.role || curSnap.data()?.role;
       const updatePayload: any = {};
       if (userData.name !== undefined) updatePayload.name = userData.name.trim();
       if (userData.username !== undefined) updatePayload.username = userData.username.trim();
@@ -245,16 +282,25 @@ export const firestoreStore = {
       if (userData.classId !== undefined) updatePayload.classId = userData.classId;
       if (userData.nip !== undefined) updatePayload.nip = userData.nip;
       if (userData.subjectSpecialty !== undefined) updatePayload.subjectSpecialty = userData.subjectSpecialty;
+      if (userData.lastLogin !== undefined) updatePayload.lastLogin = userData.lastLogin;
       if (userData.password && String(userData.password).trim().length > 0) {
+        const cleanPass = String(userData.password).trim();
+        const passwordHash = await hashPasswordAsync(cleanPass);
         updatePayload.passwordCustom = true;
-        updatePayload.plainPassword = String(userData.password).trim();
+        if (passwordHash) updatePayload.passwordHash = passwordHash;
+        if (currentRole === 'student' || currentRole === 'teacher') {
+          updatePayload.plainPassword = cleanPass;
+        }
       }
       updatePayload.updatedAt = new Date().toISOString();
 
-      await updateDoc(ref, updatePayload);
+      await updateDoc(ref, stripUndefinedDeep(updatePayload));
       const updatedSnap = await getDoc(ref);
       const safe = updatedSnap.data() || {};
       delete safe.passwordHash;
+      if (safe.role === 'admin') {
+        delete safe.plainPassword;
+      }
       return { success: true, user: safe, message: 'Data pengguna tersimpan di Firestore.' };
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
@@ -283,19 +329,22 @@ export const firestoreStore = {
       for (const s of students) {
         const username = s.username || s.nis;
         if (!username) continue;
+        const plainPassword = String(s.password || 'siswa123').trim();
+        const passwordHash = await hashPasswordAsync(plainPassword);
         const id = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        await setDoc(doc(db, path, id), {
+        await setDoc(doc(db, path, id), stripUndefinedDeep({
           id,
           username,
           name: s.name,
           role: 'student',
           nis: s.nis || username,
           classId: s.classId || '',
-          plainPassword: s.password || 'siswa123',
+          plainPassword,
+          ...(passwordHash ? { passwordHash } : {}),
           email: s.email || '',
           isActive: true,
           createdAt: new Date().toISOString(),
-        });
+        }));
         count++;
       }
       return { success: true, count, message: `Berhasil mengimpor ${count} siswa ke Cloud Firestore.` };
@@ -323,11 +372,13 @@ export const firestoreStore = {
         const slice = docs.slice(i, i + chunkSize);
         for (const d of slice) {
           const randomPass = generateRandomPassword(6);
-          batch.update(d.ref, {
+          const passwordHash = await hashPasswordAsync(randomPass);
+          batch.update(d.ref, stripUndefinedDeep({
             passwordCustom: true,
             plainPassword: randomPass,
+            ...(passwordHash ? { passwordHash } : {}),
             updatedAt: now,
-          });
+          }));
         }
         await batch.commit();
       }

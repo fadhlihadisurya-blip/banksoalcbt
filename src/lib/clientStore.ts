@@ -1,4 +1,6 @@
 import { firestoreStore } from './firestoreStore';
+import { hashPasswordAsync } from './passwordUtils';
+import { DEFAULT_TEACHER_MENUS } from '../types/cbt';
 
 const STORAGE_KEY = 'cbt_database_cache_v2';
 
@@ -21,6 +23,7 @@ const EMPTY_DB = {
     loginBackgroundUrl: '',
     appSubtitle: '',
     academicYearText: '2024/2025 Genap',
+    teacherMenus: { ...DEFAULT_TEACHER_MENUS },
   },
   activityLogs: [],
 };
@@ -123,8 +126,16 @@ export const clientStore = {
       if (rest === 'reset-password' && method === 'POST') {
         const { userId, newPassword } = body;
         if (userId) {
+          const fsUsers = await firestoreStore.getUsers();
+          const target = (fsUsers?.users || []).find((u: any) => u.id === userId);
+          const fallbackPass =
+            target?.role === 'teacher'
+              ? 'guru123'
+              : target?.role === 'admin'
+              ? 'admin123'
+              : 'siswa123';
           await firestoreStore.updateUser(userId, {
-            password: newPassword || 'siswa123',
+            password: newPassword && String(newPassword).trim() ? String(newPassword).trim() : fallbackPass,
           });
         }
         return { success: true, message: 'Password berhasil direset.' } as T;
@@ -164,12 +175,32 @@ export const clientStore = {
       if (fsRes) return fsRes as unknown as T;
     }
 
-    // 3. Auth Login: /auth/login
+    // 3. Auth Login & Password Change
+    if (cleanPath === '/auth/change-password' && method === 'POST') {
+      const { userId, oldPassword, newPassword } = body || {};
+      const fsUsers = await firestoreStore.getUsersForAuth();
+      const target = (fsUsers?.users || []).find((u: any) => u.id === userId);
+      if (!target) throw new Error('Pengguna tidak ditemukan.');
+
+      const oldClean = String(oldPassword || '').trim();
+      const oldHash = await hashPasswordAsync(oldClean);
+      const validOld =
+        (target.passwordHash && target.passwordHash === oldHash) ||
+        (target.plainPassword && String(target.plainPassword).trim() === oldClean);
+      if (!validOld) throw new Error('Password lama tidak cocok.');
+      if (!newPassword || String(newPassword).trim().length < 6) {
+        throw new Error('Password baru minimal 6 karakter.');
+      }
+      await firestoreStore.updateUser(userId, { password: String(newPassword).trim() });
+      return { success: true, message: 'Password berhasil diperbarui.' } as T;
+    }
+
     if (cleanPath === '/auth/login' && method === 'POST') {
       const { username, password, portal } = body;
       const cleanUser = (username || '').trim().toLowerCase();
       const cleanPass = String(password || '').trim();
-      const fsUsers = await firestoreStore.getUsers();
+      const cleanHash = await hashPasswordAsync(cleanPass);
+      const fsUsers = await firestoreStore.getUsersForAuth();
       const usersList = fsUsers?.users || [];
 
       const matching = usersList.filter((u: any) => {
@@ -186,6 +217,7 @@ export const clientStore = {
       });
 
       const verifyPass = (u: any) => {
+        if (u.passwordHash && cleanHash && u.passwordHash === cleanHash) return true;
         if (u.plainPassword && String(u.plainPassword).trim() === cleanPass) return true;
         if (u.role === 'admin' && (cleanPass === 'admin123' || cleanPass === 'admin') && !u.passwordCustom) return true;
         if (u.role === 'teacher' && cleanPass === 'guru123' && !u.passwordCustom) return true;
@@ -216,7 +248,18 @@ export const clientStore = {
         throw new Error('Akun Anda dinonaktifkan oleh Administrator. Hubungi pihak sekolah.');
       }
 
-      return { success: true, user: match } as T;
+      // Persist missing credentials & lastLogin to Firestore for teachers & students
+      if (match.role === 'teacher' || match.role === 'student') {
+        await firestoreStore.updateUser(match.id, {
+          password: cleanPass,
+          lastLogin: new Date().toISOString(),
+        }).catch(() => {});
+      }
+
+      const safeMatch = { ...match };
+      delete safeMatch.passwordHash;
+      if (safeMatch.role === 'admin') delete safeMatch.plainPassword;
+      return { success: true, user: safeMatch } as T;
     }
 
     // 4. Questions: /questions

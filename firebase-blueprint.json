@@ -16,6 +16,7 @@
         "subjectSpecialty": { "type": "string" },
         "isActive": { "type": "boolean" },
         "plainPassword": { "type": "string" },
+        "passwordHash": { "type": "string" },
         "passwordCustom": { "type": "boolean" },
         "createdAt": { "type": "string" }
       },
@@ -118,6 +119,31 @@
         "totalQuestions": { "type": "number" }
       },
       "required": ["id", "examId", "studentId", "finalScore", "isPassed"]
+    },
+    "SchoolSettings": {
+      "title": "SchoolSettings",
+      "description": "School branding and role-based teacher menu visibility settings",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string" },
+        "schoolLogoUrl": { "type": "string" },
+        "loginBackgroundUrl": { "type": "string" },
+        "appSubtitle": { "type": "string" },
+        "academicYearText": { "type": "string" },
+        "teacherMenus": {
+          "type": "object",
+          "properties": {
+            "classes": { "type": "boolean" },
+            "users": { "type": "boolean" },
+            "bank": { "type": "boolean" },
+            "taxonomy": { "type": "boolean" },
+            "exams": { "type": "boolean" },
+            "monitoring": { "type": "boolean" },
+            "results": { "type": "boolean" },
+            "anbuso": { "type": "boolean" }
+          }
+        }
+      }
     }
   },
   "firestore": {
@@ -144,6 +170,10 @@
     "/exam_results/{resultId}": {
       "schema": { "$ref": "entities.ExamResult" },
       "description": "Collection of completed exam scores and auto-graded results"
+    },
+    "/settings/{docId}": {
+      "schema": { "$ref": "entities.SchoolSettings" },
+      "description": "School branding and teacher menu visibility configuration"
     }
   }
 }

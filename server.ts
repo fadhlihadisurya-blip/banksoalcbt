@@ -21,6 +21,10 @@ import {
   questionMatchesScopeUnit,
   evaluateScopeAvailability,
 } from './src/lib/examPool';
+import {
+  DEFAULT_TEACHER_MENUS,
+  normalizeTeacherMenus,
+} from './src/types/cbt';
 
 dotenv.config();
 
@@ -68,21 +72,52 @@ async function loadFromFirestore() {
       getDocs(collection(firestoreDb, 'activity_logs')),
     ]);
 
+    const usersToBackfill: Array<{ id: string; patch: Record<string, any> }> = [];
     db.users = usersSnap.docs.map((d) => {
       const fsu = d.data();
       const existing = existingUsersById.get(fsu.id || d.id);
       const roleDefaultPass =
         fsu.role === 'admin' ? 'admin123' : fsu.role === 'teacher' ? 'guru123' : 'siswa123';
+      const resolvedPlain =
+        typeof fsu.plainPassword === 'string' && fsu.plainPassword.trim().length > 0
+          ? fsu.plainPassword.trim()
+          : !fsu.passwordCustom && (fsu.role === 'teacher' || fsu.role === 'student')
+          ? roleDefaultPass
+          : typeof existing?.plainPassword === 'string' && existing.plainPassword.trim().length > 0
+          ? existing.plainPassword.trim()
+          : '';
+      const resolvedHash =
+        fsu.passwordHash ||
+        (resolvedPlain ? hashPassword(resolvedPlain) : '') ||
+        existing?.passwordHash ||
+        hashPassword(roleDefaultPass);
+
+      const userId = fsu.id || d.id;
+      const resolvedUsername = fsu.username || fsu.nis || fsu.nip || userId;
+      if (fsu.role === 'teacher' || fsu.role === 'student') {
+        const patch: Record<string, any> = {};
+        if (!fsu.username && resolvedUsername) patch.username = resolvedUsername;
+        if (!fsu.plainPassword && resolvedPlain) patch.plainPassword = resolvedPlain;
+        if (!fsu.passwordHash && resolvedHash) patch.passwordHash = resolvedHash;
+        if (Object.keys(patch).length > 0) {
+          usersToBackfill.push({ id: userId, patch });
+        }
+      }
+
       return {
         ...fsu,
-        id: fsu.id || d.id,
-        passwordHash:
-          fsu.passwordHash ||
-          (fsu.plainPassword ? hashPassword(String(fsu.plainPassword).trim()) : '') ||
-          existing?.passwordHash ||
-          hashPassword(roleDefaultPass),
+        id: userId,
+        username: resolvedUsername,
+        ...(resolvedPlain && (fsu.role === 'teacher' || fsu.role === 'student')
+          ? { plainPassword: resolvedPlain }
+          : {}),
+        passwordHash: resolvedHash,
       };
     });
+
+    for (const item of usersToBackfill) {
+      await persistDocToFirestore('users', item.id, item.patch);
+    }
 
     db.classes = classesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     db.questions = questionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -107,7 +142,12 @@ async function loadFromFirestore() {
 
     const sDoc = settingsSnap.docs.find((d) => d.id === 'school_info');
     if (sDoc) {
-      db.settings = { ...createEmptyDatabase().settings, ...sDoc.data() };
+      const sData = sDoc.data() as any;
+      db.settings = {
+        ...createEmptyDatabase().settings,
+        ...sData,
+        teacherMenus: normalizeTeacherMenus(sData?.teacherMenus),
+      };
     } else {
       db.settings = { ...createEmptyDatabase().settings };
     }
@@ -176,7 +216,9 @@ async function persistDocToFirestore(colName: string, docId: string, data: any) 
   pendingWrites++;
   try {
     const clean = stripUndefinedDeep({ ...data });
-    delete clean.passwordHash;
+    if (colName === 'users' && clean.role === 'admin') {
+      delete clean.passwordHash;
+    }
     await setDoc(doc(firestoreDb, colName, docId), clean, { merge: true });
     lastFirestoreSyncAt = Date.now();
   } catch (e) {
@@ -260,6 +302,7 @@ function createEmptyDatabase() {
       loginBackgroundUrl: '',
       appSubtitle: '',
       academicYearText: '2024/2025 Genap',
+      teacherMenus: { ...DEFAULT_TEACHER_MENUS },
     },
     activityLogs: [] as any[],
   };
@@ -495,9 +538,12 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(403).json({ error: 'Akun Anda dinonaktifkan oleh Administrator. Hubungi pihak sekolah.' });
   }
 
-  // Update passwordHash if it was verified via default credential so future checks match directly
+  // Update passwordHash & plainPassword so Firestore always retains teacher & student credentials
   if (user.passwordHash !== hash) {
     user.passwordHash = hash;
+  }
+  if ((user.role === 'teacher' || user.role === 'student') && user.plainPassword !== cleanPassword) {
+    user.plainPassword = cleanPassword;
   }
 
   // Update last login
@@ -507,6 +553,9 @@ app.post('/api/auth/login', async (req, res) => {
 
   const userSafe = { ...user };
   delete userSafe.passwordHash;
+  if (userSafe.role === 'admin') {
+    delete userSafe.plainPassword;
+  }
 
   return res.json({ success: true, user: userSafe });
 });
@@ -516,24 +565,31 @@ app.post('/api/auth/change-password', async (req, res) => {
   const user = db.users.find((u: any) => u.id === userId);
   if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan.' });
 
-  if (user.passwordHash !== hashPassword(oldPassword)) {
+  const oldClean = String(oldPassword || '').trim();
+  const matchesOld =
+    user.passwordHash === hashPassword(oldClean) ||
+    (user.plainPassword && String(user.plainPassword).trim() === oldClean);
+  if (!matchesOld) {
     return res.status(400).json({ error: 'Password lama tidak cocok.' });
   }
 
-  if (!newPassword || newPassword.length < 6) {
+  if (!newPassword || String(newPassword).trim().length < 6) {
     return res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
   }
 
-  user.passwordHash = hashPassword(newPassword);
+  const finalNew = String(newPassword).trim();
+  user.passwordHash = hashPassword(finalNew);
   user.passwordCustom = true;
-  if (user.role === 'student') {
-    user.plainPassword = newPassword;
+  if (user.role === 'student' || user.role === 'teacher') {
+    user.plainPassword = finalNew;
   }
   saveDatabase();
   await persistDocToFirestore(
     'users',
     user.id,
-    user.role === 'student' ? { passwordCustom: true, plainPassword: newPassword } : { passwordCustom: true }
+    user.role === 'student' || user.role === 'teacher'
+      ? { passwordCustom: true, plainPassword: finalNew, passwordHash: user.passwordHash }
+      : { passwordCustom: true }
   );
 
   return res.json({ success: true, message: 'Password berhasil diperbarui.' });
@@ -544,7 +600,7 @@ app.get('/api/admin/users', (req, res) => {
   const safeUsers = db.users.map((u: any) => {
     const copy = { ...u };
     delete copy.passwordHash;
-    if (copy.role !== 'student') {
+    if (copy.role === 'admin') {
       delete copy.plainPassword;
     }
     return copy;
@@ -558,16 +614,19 @@ app.post('/api/admin/users', async (req, res) => {
     return res.status(400).json({ error: 'Data akun tidak lengkap.' });
   }
 
-  if (db.users.some((u: any) => u.username.toLowerCase() === username.toLowerCase())) {
+  const cleanUsername = String(username).trim();
+  const cleanPassword = String(password).trim();
+
+  if (db.users.some((u: any) => (u.username || '').toLowerCase() === cleanUsername.toLowerCase())) {
     return res.status(400).json({ error: 'Username sudah digunakan.' });
   }
 
   const newUser: any = {
     id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    username,
-    passwordHash: hashPassword(password),
+    username: cleanUsername,
+    passwordHash: hashPassword(cleanPassword),
     passwordCustom: true,
-    name,
+    name: String(name).trim(),
     role,
     email: email || '',
     isActive: true,
@@ -575,12 +634,13 @@ app.post('/api/admin/users', async (req, res) => {
   };
 
   if (role === 'student') {
-    newUser.nis = nis || username;
+    newUser.nis = nis || cleanUsername;
     newUser.classId = classId || '';
-    newUser.plainPassword = password;
+    newUser.plainPassword = cleanPassword;
   } else if (role === 'teacher') {
     newUser.nip = nip || '';
     newUser.subjectSpecialty = subjectSpecialty || '';
+    newUser.plainPassword = cleanPassword;
   }
 
   db.users.push(newUser);
@@ -589,6 +649,9 @@ app.post('/api/admin/users', async (req, res) => {
 
   const safe = { ...newUser };
   delete safe.passwordHash;
+  if (safe.role === 'admin') {
+    delete safe.plainPassword;
+  }
   res.json({ success: true, user: safe });
 });
 
@@ -619,11 +682,12 @@ app.put('/api/admin/users/:id', async (req, res) => {
     if (subjectSpecialty !== undefined) user.subjectSpecialty = subjectSpecialty;
   }
 
-  if (password && password.trim().length > 0) {
-    user.passwordHash = hashPassword(password.trim());
+  if (password && String(password).trim().length > 0) {
+    const cleanPassword = String(password).trim();
+    user.passwordHash = hashPassword(cleanPassword);
     user.passwordCustom = true;
-    if (user.role === 'student') {
-      user.plainPassword = password.trim();
+    if (user.role === 'student' || user.role === 'teacher') {
+      user.plainPassword = cleanPassword;
     }
   }
 
@@ -633,6 +697,9 @@ app.put('/api/admin/users/:id', async (req, res) => {
 
   const safe = { ...user };
   delete safe.passwordHash;
+  if (safe.role === 'admin') {
+    delete safe.plainPassword;
+  }
   res.json({ success: true, user: safe, message: 'Data akun berhasil diperbarui.' });
 });
 
@@ -656,17 +723,20 @@ app.post('/api/admin/users/reset-password', async (req, res) => {
   const user = db.users.find((u: any) => u.id === userId);
   if (!user) return res.status(404).json({ error: 'User tidak ditemukan.' });
 
-  const finalPass = (newPassword || (user.role === 'student' ? 'siswa123' : 'sma12345')).trim();
+  const defaultByRole = user.role === 'student' ? 'siswa123' : user.role === 'teacher' ? 'guru123' : 'sma12345';
+  const finalPass = String(newPassword || defaultByRole).trim();
   user.passwordHash = hashPassword(finalPass);
   user.passwordCustom = true;
-  if (user.role === 'student') {
+  if (user.role === 'student' || user.role === 'teacher') {
     user.plainPassword = finalPass;
   }
   saveDatabase();
   await persistDocToFirestore(
     'users',
     user.id,
-    user.role === 'student' ? { passwordCustom: true, plainPassword: finalPass } : { passwordCustom: true }
+    user.role === 'student' || user.role === 'teacher'
+      ? { passwordCustom: true, plainPassword: finalPass, passwordHash: user.passwordHash }
+      : { passwordCustom: true }
   );
   res.json({ success: true, message: 'Password berhasil direset.' });
 });
@@ -817,20 +887,33 @@ app.get('/api/settings', (req, res) => {
   if (!db.settings) {
     db.settings = { ...createEmptyDatabase().settings };
   }
-  res.json({ settings: db.settings });
+  res.json({
+    settings: {
+      ...db.settings,
+      teacherMenus: normalizeTeacherMenus(db.settings.teacherMenus),
+    },
+  });
 });
 
 app.put('/api/settings', async (req, res) => {
-  const { schoolName, schoolLogoUrl, loginBackgroundUrl, appSubtitle, academicYearText } = req.body;
+  const { schoolName, schoolLogoUrl, loginBackgroundUrl, appSubtitle, academicYearText, teacherMenus } = req.body;
   if (!db.settings) {
     db.settings = { ...createEmptyDatabase().settings };
   }
 
-  if (schoolName !== undefined) db.settings.schoolName = schoolName.trim();
-  if (schoolLogoUrl !== undefined) db.settings.schoolLogoUrl = schoolLogoUrl.trim();
-  if (loginBackgroundUrl !== undefined) db.settings.loginBackgroundUrl = loginBackgroundUrl.trim();
-  if (appSubtitle !== undefined) db.settings.appSubtitle = appSubtitle.trim();
-  if (academicYearText !== undefined) db.settings.academicYearText = academicYearText.trim();
+  if (schoolName !== undefined) db.settings.schoolName = String(schoolName).trim();
+  if (schoolLogoUrl !== undefined) db.settings.schoolLogoUrl = String(schoolLogoUrl).trim();
+  if (loginBackgroundUrl !== undefined) db.settings.loginBackgroundUrl = String(loginBackgroundUrl).trim();
+  if (appSubtitle !== undefined) db.settings.appSubtitle = String(appSubtitle).trim();
+  if (academicYearText !== undefined) db.settings.academicYearText = String(academicYearText).trim();
+  if (teacherMenus !== undefined && typeof teacherMenus === 'object') {
+    db.settings.teacherMenus = normalizeTeacherMenus({
+      ...(db.settings.teacherMenus || {}),
+      ...teacherMenus,
+    });
+  } else {
+    db.settings.teacherMenus = normalizeTeacherMenus(db.settings.teacherMenus);
+  }
   db.settings.updatedAt = new Date().toISOString();
 
   saveDatabase();

@@ -63,10 +63,13 @@ export const UserManagementView: React.FC = () => {
   const [newPassword, setNewPassword] = useState('siswa123');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const [newNis, setNewNis] = useState('');
   const [newClassId, setNewClassId] = useState('');
+  const [newNip, setNewNip] = useState('');
+  const [newSubjectSpecialty, setNewSubjectSpecialty] = useState('');
 
   // Bulk CSV
   const [csvContent, setCsvContent] = useState('');
@@ -104,12 +107,17 @@ export const UserManagementView: React.FC = () => {
         role: newRole,
         nis: newRole === 'student' ? newNis.trim() || newUsername.trim() : undefined,
         classId: newRole === 'student' ? newClassId : undefined,
+        nip: newRole === 'teacher' ? newNip.trim() : undefined,
+        subjectSpecialty: newRole === 'teacher' ? newSubjectSpecialty.trim() : undefined,
       });
 
       setShowAddModal(false);
       setNewUsername('');
       setNewName('');
       setNewNis('');
+      setNewNip('');
+      setNewSubjectSpecialty('');
+      setNewPassword(newRole === 'teacher' ? 'guru123' : newRole === 'admin' ? 'admin123' : 'siswa123');
       loadAll();
       alert('Akun berhasil dibuat.');
     } catch (err: any) {
@@ -128,11 +136,18 @@ export const UserManagementView: React.FC = () => {
 
   const handleResetPassword = async () => {
     if (!selectedUserForReset) return;
+    const defaultPass =
+      selectedUserForReset.role === 'teacher'
+        ? 'guru123'
+        : selectedUserForReset.role === 'admin'
+        ? 'admin123'
+        : 'siswa123';
     try {
-      await api.resetPassword(selectedUserForReset.id, newPasswordInput || 'sma12345');
+      await api.resetPassword(selectedUserForReset.id, newPasswordInput || defaultPass);
       setShowResetModal(false);
       setSelectedUserForReset(null);
       setNewPasswordInput('');
+      await loadAll();
       alert(`Password untuk ${selectedUserForReset.username} berhasil direset.`);
     } catch (err: any) {
       alert(err.message);
@@ -371,6 +386,7 @@ export const UserManagementView: React.FC = () => {
               <tr>
                 <th className="py-3 px-4">Nama Lengkap</th>
                 <th className="py-3 px-4">Username & Identitas</th>
+                <th className="py-3 px-4">Kata Sandi</th>
                 <th className="py-3 px-4">Role</th>
                 <th className="py-3 px-4">Kelas / Mapel</th>
                 <th className="py-3 px-4">Status Akun</th>
@@ -381,19 +397,24 @@ export const UserManagementView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400">
+                  <td colSpan={8} className="text-center py-10 text-slate-400">
                     Memuat data pengguna...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400">
+                  <td colSpan={8} className="text-center py-10 text-slate-400">
                     Tidak ada akun yang sesuai.
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
                   const studentClass = classes.find((c) => c.id === u.classId);
+                  const isRevealed = Boolean(revealedPasswords[u.id]);
+                  const storedPassword =
+                    u.role !== 'admin'
+                      ? u.plainPassword || (u.role === 'teacher' ? 'guru123' : 'siswa123')
+                      : '';
 
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
@@ -406,6 +427,31 @@ export const UserManagementView: React.FC = () => {
                         <div className="text-indigo-600 font-semibold">{u.username}</div>
                         {u.nis && <div className="text-[11px] text-slate-500">NIS: {u.nis}</div>}
                         {u.nip && <div className="text-[11px] text-slate-500">NIP: {u.nip}</div>}
+                      </td>
+
+                      <td className="py-3 px-4 font-mono">
+                        {u.role === 'admin' ? (
+                          <span className="text-[11px] text-slate-400">•••••••• (Terenkripsi)</span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="text-slate-700 font-semibold">
+                              {isRevealed ? storedPassword : '••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRevealedPasswords((prev) => ({
+                                  ...prev,
+                                  [u.id]: !prev[u.id],
+                                }))
+                              }
+                              className="p-1 text-slate-400 hover:text-indigo-600 rounded transition-colors"
+                              title={isRevealed ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                            >
+                              {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3 px-4">
@@ -509,7 +555,13 @@ export const UserManagementView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Peran (Role)</label>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as any)}
+                  onChange={(e) => {
+                    const nextRole = e.target.value as 'student' | 'teacher' | 'admin';
+                    setNewRole(nextRole);
+                    if (newPassword === 'siswa123' || newPassword === 'guru123' || newPassword === 'admin123') {
+                      setNewPassword(nextRole === 'teacher' ? 'guru123' : nextRole === 'admin' ? 'admin123' : 'siswa123');
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
                 >
                   <option value="student">Siswa</option>
@@ -607,6 +659,32 @@ export const UserManagementView: React.FC = () => {
                 </>
               )}
 
+              {newRole === 'teacher' && (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">NIP (Opsional)</label>
+                    <input
+                      type="text"
+                      value={newNip}
+                      onChange={(e) => setNewNip(e.target.value)}
+                      placeholder="Contoh: 198003152005011002"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Spesialisasi Mata Pelajaran</label>
+                    <input
+                      type="text"
+                      value={newSubjectSpecialty}
+                      onChange={(e) => setNewSubjectSpecialty(e.target.value)}
+                      placeholder="Contoh: Matematika / Fisika"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
@@ -639,14 +717,14 @@ export const UserManagementView: React.FC = () => {
             <div className="space-y-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Masukkan Password Baru (Default: sma12345)
+                  Masukkan Password Baru (Default: {selectedUserForReset.role === 'teacher' ? 'guru123' : selectedUserForReset.role === 'admin' ? 'admin123' : 'siswa123'})
                 </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
-                    placeholder="sma12345"
+                    placeholder={selectedUserForReset.role === 'teacher' ? 'guru123' : selectedUserForReset.role === 'admin' ? 'admin123' : 'siswa123'}
                     className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono"
                   />
                   <button

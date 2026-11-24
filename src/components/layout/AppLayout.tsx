@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
+import { normalizeTeacherMenus, TeacherMenuKey } from '../../types/cbt';
 import {
   GraduationCap,
   LayoutDashboard,
@@ -66,14 +67,25 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }
 
     if (user.role === 'teacher') {
+      const teacherMenus = normalizeTeacherMenus(settings.teacherMenus);
+      const configurableTeacherItems: Array<{
+        id: TeacherMenuKey;
+        label: string;
+        icon: typeof School;
+      }> = [
+        { id: 'classes', label: 'Manajemen Kelas', icon: School },
+        { id: 'users', label: 'Manajemen Akun', icon: Users },
+        { id: 'bank', label: 'Bank Soal Pusat', icon: Database },
+        { id: 'taxonomy', label: 'Taksonomi Soal', icon: Layers },
+        { id: 'exams', label: 'Daftar Ujian', icon: FileQuestion },
+        { id: 'monitoring', label: 'Monitoring Ujian', icon: Activity },
+        { id: 'results', label: 'Hasil & Penilaian', icon: Award },
+        { id: 'anbuso', label: 'Anbuso', icon: ClipboardCheck },
+      ];
+
       return [
         { id: 'dashboard' as NavTab, label: 'Dashboard Guru', icon: LayoutDashboard },
-        { id: 'classes' as NavTab, label: 'Manajemen Kelas', icon: School },
-        { id: 'bank' as NavTab, label: 'Bank Soal & Taksonomi', icon: Database },
-        { id: 'exams' as NavTab, label: 'Generator Ujian', icon: FileQuestion },
-        { id: 'monitoring' as NavTab, label: 'Live Monitoring', icon: Activity },
-        { id: 'results' as NavTab, label: 'Hasil & Penilaian', icon: Award },
-        { id: 'anbuso' as NavTab, label: 'Anbuso', icon: ClipboardCheck },
+        ...configurableTeacherItems.filter((item) => teacherMenus[item.id]),
       ];
     }
 

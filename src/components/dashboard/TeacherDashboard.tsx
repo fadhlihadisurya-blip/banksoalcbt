@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
-import { Exam, Question, ClassGroup } from '../../types/cbt';
+import {
+  Exam,
+  Question,
+  ClassGroup,
+  TeacherMenuKey,
+  normalizeTeacherMenus,
+} from '../../types/cbt';
+import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 import {
   FileQuestion,
   Database,
@@ -45,6 +53,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onSelectExamForResults,
   refreshKey = 0,
 }) => {
+  const { user } = useAuth();
+  const { settings } = useSettings();
+  const teacherMenus = normalizeTeacherMenus(settings.teacherMenus);
+  const canAccess = (key: TeacherMenuKey) => user?.role === 'admin' || teacherMenus[key];
+
   const [exams, setExams] = useState<Exam[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [classes, setClasses] = useState<ClassGroup[]>([]);
@@ -170,25 +183,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <button
-            onClick={onOpenExamGenerator}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Generator Ujian Dinamis</span>
-          </button>
-          <button
-            onClick={() => onNavigate('bank')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-semibold transition-colors"
-          >
-            <Database className="w-4 h-4" />
-            <span>Kelola Bank Soal</span>
-          </button>
+          {canAccess('exams') && (
+            <button
+              onClick={onOpenExamGenerator}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Generator Ujian Dinamis</span>
+            </button>
+          )}
+          {canAccess('bank') && (
+            <button
+              onClick={() => onNavigate('bank')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-semibold transition-colors"
+            >
+              <Database className="w-4 h-4" />
+              <span>Kelola Bank Soal</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Cognitive Bank Distribution & Exam Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className={`grid grid-cols-1 ${canAccess('anbuso') ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-5`}>
         {/* Card 1: Bank Soal Kognitif */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between">
           <div>
@@ -244,15 +261,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <button
-              onClick={() => onNavigate('bank')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center justify-between w-full"
-            >
-              <span>Tambah / Impor Soal Massal (Excel)</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          {canAccess('bank') && (
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => onNavigate('bank')}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center justify-between w-full"
+              >
+                <span>Tambah / Impor Soal Massal (Excel)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Card 2: Ujian Berjalan & Token Aktif */}
@@ -298,62 +317,66 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 >
                   Kelola Token
                 </button>
-                <button
-                  onClick={() => {
-                    onSelectExamForMonitoring(activeExams[0].id);
-                    onNavigate('monitoring');
-                  }}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex-1"
-                >
-                  Live Monitoring
-                </button>
+                {canAccess('monitoring') && (
+                  <button
+                    onClick={() => {
+                      onSelectExamForMonitoring(activeExams[0].id);
+                      onNavigate('monitoring');
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex-1"
+                  >
+                    Live Monitoring
+                  </button>
+                )}
               </>
             )}
           </div>
         </div>
 
         {/* Card 3: Anbuso Shortcut */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">Analisis Butir Soal</span>
-              <ClipboardCheck className="w-4 h-4 text-indigo-600" />
+        {canAccess('anbuso') && (
+          <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">Analisis Butir Soal</span>
+                <ClipboardCheck className="w-4 h-4 text-indigo-600" />
+              </div>
+
+              <div className="mt-3">
+                <div className="text-sm font-bold text-slate-900">Evaluasi Kualitas Soal (Anbuso)</div>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Ukur kualitas setiap butir soal secara objektif berdasarkan jawaban peserta untuk perbaikan bank soal sekolah.
+                </p>
+              </div>
+
+              <div className="mt-4 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs space-y-1.5 text-indigo-900">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                  <span>Difficulty, Discrimination & Distractor</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                  <span>Reliabilitas & Decision Butir Soal</span>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-3">
-              <div className="text-sm font-bold text-slate-900">Evaluasi Kualitas Soal (Anbuso)</div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Ukur kualitas setiap butir soal secara objektif berdasarkan jawaban peserta untuk perbaikan bank soal sekolah.
-              </p>
-            </div>
-
-            <div className="mt-4 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs space-y-1.5 text-indigo-900">
-              <div className="flex items-center gap-1.5 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
-                <span>Difficulty, Discrimination & Distractor</span>
-              </div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
-                <span>Reliabilitas & Decision Butir Soal</span>
-              </div>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => {
+                  if (activeExams.length > 0) {
+                    onSelectExamForResults(activeExams[0].id);
+                  }
+                  onNavigate('anbuso');
+                }}
+                className="w-full py-2 px-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                <span>Buka Menu Anbuso</span>
+              </button>
             </div>
           </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <button
-              onClick={() => {
-                if (activeExams.length > 0) {
-                  onSelectExamForResults(activeExams[0].id);
-                }
-                onNavigate('anbuso');
-              }}
-              className="w-full py-2 px-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-            >
-              <ClipboardCheck className="w-3.5 h-3.5" />
-              <span>Buka Menu Anbuso</span>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Active Exams Table */}
@@ -363,12 +386,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <h3 className="text-sm font-bold text-slate-900">Daftar Paket Ujian Sekolah</h3>
             <p className="text-xs text-slate-500">Monitoring langsung, pengelolaan token, dan publikasi hasil ujian</p>
           </div>
-          <button
-            onClick={onOpenExamGenerator}
-            className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors self-start sm:self-auto"
-          >
-            + Buat Ujian Baru
-          </button>
+          {canAccess('exams') && (
+            <button
+              onClick={onOpenExamGenerator}
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors self-start sm:self-auto"
+            >
+              + Buat Ujian Baru
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -452,28 +477,32 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => {
-                            onSelectExamForMonitoring(exam.id);
-                            onNavigate('monitoring');
-                          }}
-                          className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                          title="Live Monitoring Ujian"
-                          aria-label="Monitoring Ujian"
-                        >
-                          <Activity className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            onSelectExamForResults(exam.id);
-                            onNavigate('results');
-                          }}
-                          className="p-1.5 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                          title="Hasil & Nilai Ujian"
-                          aria-label="Nilai Ujian"
-                        >
-                          <Award className="w-4 h-4" />
-                        </button>
+                        {canAccess('monitoring') && (
+                          <button
+                            onClick={() => {
+                              onSelectExamForMonitoring(exam.id);
+                              onNavigate('monitoring');
+                            }}
+                            className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                            title="Live Monitoring Ujian"
+                            aria-label="Monitoring Ujian"
+                          >
+                            <Activity className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canAccess('results') && (
+                          <button
+                            onClick={() => {
+                              onSelectExamForResults(exam.id);
+                              onNavigate('results');
+                            }}
+                            className="p-1.5 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                            title="Hasil & Nilai Ujian"
+                            aria-label="Nilai Ujian"
+                          >
+                            <Award className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeletingExam(exam)}
                           className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Settings,
   School,
@@ -6,14 +6,26 @@ import {
   Upload,
   Check,
   RotateCcw,
-  Sparkles,
-  ShieldCheck,
   Eye,
   GraduationCap,
   Save,
   AlertCircle,
+  SlidersHorizontal,
+  Users,
+  Database,
+  Layers,
+  FileQuestion,
+  Activity,
+  Award,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useSettings } from '../../context/SettingsContext';
+import {
+  DEFAULT_TEACHER_MENUS,
+  TeacherMenuKey,
+  TeacherMenuVisibility,
+  normalizeTeacherMenus,
+} from '../../types/cbt';
 
 const PRESET_BACKGROUNDS = [
   {
@@ -60,18 +72,125 @@ const PRESET_LOGOS = [
   },
 ];
 
+const TEACHER_MENU_ITEMS: Array<{
+  key: TeacherMenuKey;
+  label: string;
+  description: string;
+  icon: React.FC<{ className?: string }>;
+}> = [
+  {
+    key: 'classes',
+    label: 'Manajemen Kelas',
+    description: 'Kelola rombongan belajar dan daftar kelas siswa.',
+    icon: School,
+  },
+  {
+    key: 'users',
+    label: 'Manajemen Akun',
+    description: 'Lihat, tambah, atau kelola akun siswa & pengguna.',
+    icon: Users,
+  },
+  {
+    key: 'bank',
+    label: 'Bank Soal Pusat',
+    description: 'Buat, edit, dan impor butir soal ke bank soal.',
+    icon: Database,
+  },
+  {
+    key: 'taxonomy',
+    label: 'Taksonomi Soal',
+    description: 'Atur mata pelajaran, bab, sub-bab, dan kompetensi.',
+    icon: Layers,
+  },
+  {
+    key: 'exams',
+    label: 'Daftar Ujian',
+    description: 'Akses generator ujian dinamis dan daftar paket ujian.',
+    icon: FileQuestion,
+  },
+  {
+    key: 'monitoring',
+    label: 'Monitoring Ujian',
+    description: 'Pantau peserta aktif, token, dan pelanggaran secara langsung.',
+    icon: Activity,
+  },
+  {
+    key: 'results',
+    label: 'Hasil & Penilaian',
+    description: 'Lihat rekap nilai, publikasi hasil, dan ekspor CSV.',
+    icon: Award,
+  },
+  {
+    key: 'anbuso',
+    label: 'Anbuso',
+    description: 'Analisis butir soal (Discrimination, Difficulty, Distractor, Reliabilitas).',
+    icon: ClipboardCheck,
+  },
+];
+
 export const SchoolSettingsView: React.FC = () => {
   const { settings, updateSettings } = useSettings();
 
-  const [formState, setFormState] = useState({
+  const [formState, setFormState] = useState<{
+    schoolName: string;
+    schoolLogoUrl: string;
+    loginBackgroundUrl: string;
+    appSubtitle: string;
+    teacherMenus: TeacherMenuVisibility;
+  }>({
     schoolName: settings.schoolName || 'SMAN 1 PRESTASI BANGSA',
     schoolLogoUrl: settings.schoolLogoUrl || '',
     loginBackgroundUrl: settings.loginBackgroundUrl || '',
     appSubtitle: settings.appSubtitle || 'CBT Portal · TP 2024/2025 Genap',
+    teacherMenus: normalizeTeacherMenus(settings.teacherMenus),
   });
 
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+
+  useEffect(() => {
+    setFormState({
+      schoolName: settings.schoolName || 'SMAN 1 PRESTASI BANGSA',
+      schoolLogoUrl: settings.schoolLogoUrl || '',
+      loginBackgroundUrl: settings.loginBackgroundUrl || '',
+      appSubtitle: settings.appSubtitle || 'CBT Portal · TP 2024/2025 Genap',
+      teacherMenus: normalizeTeacherMenus(settings.teacherMenus),
+    });
+  }, [
+    settings.schoolName,
+    settings.schoolLogoUrl,
+    settings.loginBackgroundUrl,
+    settings.appSubtitle,
+    settings.teacherMenus,
+  ]);
+
+  const handleToggleTeacherMenu = (key: TeacherMenuKey) => {
+    setFormState((prev) => ({
+      ...prev,
+      teacherMenus: {
+        ...prev.teacherMenus,
+        [key]: !prev.teacherMenus[key],
+      },
+    }));
+  };
+
+  const handleSetAllTeacherMenus = (visible: boolean) => {
+    setFormState((prev) => ({
+      ...prev,
+      teacherMenus: {
+        classes: visible,
+        users: visible,
+        bank: visible,
+        taxonomy: visible,
+        exams: visible,
+        monitoring: visible,
+        results: visible,
+        anbuso: visible,
+      },
+    }));
+  };
 
   // File Upload Handlers
   const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,13 +198,14 @@ export const SchoolSettingsView: React.FC = () => {
     if (!file) return;
 
     if (file.size > 3 * 1024 * 1024) {
-      alert('Ukuran berkas logo maksimal 3 MB.');
+      setErrorMessage('Ukuran berkas logo maksimal 3 MB.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       if (event.target?.result) {
+        setErrorMessage(null);
         setFormState((prev) => ({
           ...prev,
           schoolLogoUrl: event.target!.result as string,
@@ -100,13 +220,14 @@ export const SchoolSettingsView: React.FC = () => {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('Ukuran berkas foto background maksimal 5 MB.');
+      setErrorMessage('Ukuran berkas foto background maksimal 5 MB.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
       if (event.target?.result) {
+        setErrorMessage(null);
         setFormState((prev) => ({
           ...prev,
           loginBackgroundUrl: event.target!.result as string,
@@ -120,31 +241,39 @@ export const SchoolSettingsView: React.FC = () => {
     e.preventDefault();
     setSaving(true);
     setToastMessage(null);
+    setErrorMessage(null);
     try {
       await updateSettings(formState);
-      setToastMessage('Pengaturan sekolah & identitas visual berhasil diperbarui!');
+      setToastMessage('Pengaturan sekolah, branding visual, dan visibilitas menu guru berhasil disimpan!');
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err: any) {
-      alert('Gagal menyimpan pengaturan: ' + (err.message || 'Terjadi kesalahan.'));
+      setErrorMessage('Gagal menyimpan pengaturan: ' + (err.message || 'Terjadi kesalahan.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleResetToDefault = () => {
-    if (confirm('Kembalikan semua pengaturan ke standar awal aplikasi?')) {
-      const defaults = {
-        schoolName: 'SMAN 1 PRESTASI BANGSA',
-        schoolLogoUrl: '',
-        loginBackgroundUrl: '',
-        appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
-      };
-      setFormState(defaults);
-      updateSettings(defaults);
+  const handleResetToDefault = async () => {
+    const defaults = {
+      schoolName: 'SMAN 1 PRESTASI BANGSA',
+      schoolLogoUrl: '',
+      loginBackgroundUrl: '',
+      appSubtitle: 'CBT Portal · TP 2024/2025 Genap',
+      teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+    };
+    setFormState(defaults);
+    setConfirmResetOpen(false);
+    setErrorMessage(null);
+    try {
+      await updateSettings(defaults);
       setToastMessage('Pengaturan telah dikembalikan ke default.');
       setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      setErrorMessage('Gagal mereset pengaturan: ' + (err.message || 'Terjadi kesalahan.'));
     }
   };
+
+  const enabledTeacherMenuCount = Object.values(formState.teacherMenus).filter(Boolean).length;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -154,17 +283,17 @@ export const SchoolSettingsView: React.FC = () => {
           <div className="flex items-center gap-2.5 text-indigo-600 mb-1">
             <Settings className="w-6 h-6" />
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Pengaturan Sekolah & Branding Visual
+              Pengaturan Sekolah, Branding & Akses Menu Guru
             </h1>
           </div>
           <p className="text-xs text-slate-500">
-            Kelola nama sekolah, logo sekolah, serta foto latar belakang halaman login portal CBT.
+            Kelola identitas sekolah, latar halaman login, serta visibilitas menu yang tampil pada akun guru.
           </p>
         </div>
 
         <button
           type="button"
-          onClick={handleResetToDefault}
+          onClick={() => setConfirmResetOpen(true)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors shrink-0"
         >
           <RotateCcw className="w-3.5 h-3.5" />
@@ -172,11 +301,45 @@ export const SchoolSettingsView: React.FC = () => {
         </button>
       </div>
 
+      {confirmResetOpen && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-amber-900 font-medium">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Kembalikan semua pengaturan sekolah dan menu guru ke standar awal aplikasi?</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setConfirmResetOpen(false)}
+              className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleResetToDefault}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-semibold hover:bg-amber-700"
+            >
+              Ya, Reset Default
+            </button>
+          </div>
+        </div>
+      )}
+
       {toastMessage && (
         <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-600" />
             <span>{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
           </div>
         </div>
       )}
@@ -459,6 +622,95 @@ export const SchoolSettingsView: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* SECTION 4: VISIBILITAS MENU AKUN GURU */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+                <span>4. Pengaturan Visibilitas Menu Akun Guru</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Pilih menu yang ditampilkan pada navigasi akun guru ({enabledTeacherMenuCount} dari {TEACHER_MENU_ITEMS.length} menu aktif).
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleSetAllTeacherMenus(true)}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+              >
+                Tampilkan Semua
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setFormState((prev) => ({
+                    ...prev,
+                    teacherMenus: { ...DEFAULT_TEACHER_MENUS },
+                  }))
+                }
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors"
+              >
+                Reset Default
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {TEACHER_MENU_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const enabled = formState.teacherMenus[item.key];
+              return (
+                <div
+                  key={item.key}
+                  className={`p-3.5 rounded-xl border transition-colors flex items-center justify-between gap-3 ${
+                    enabled
+                      ? 'bg-indigo-50/40 border-indigo-200'
+                      : 'bg-slate-50/80 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                        enabled
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-200 text-slate-500'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900">{item.label}</div>
+                      <div className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                        {item.description}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`Toggle menu ${item.label}`}
+                    onClick={() => handleToggleTeacherMenu(item.key)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
+                      enabled ? 'bg-indigo-600' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition duration-200 ${
+                        enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
