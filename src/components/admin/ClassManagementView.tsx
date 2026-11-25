@@ -36,6 +36,172 @@ export function getFirstWordUsername(fullName: string): string {
   return firstWord.toLowerCase().replace(/[^a-z0-9_]/gi, '');
 }
 
+function splitDelimitedLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === delimiter && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result.map((cell) => cell.replace(/^"|"$/g, '').trim());
+}
+
+function extractTableTextFromHtml(html: string): string | null {
+  if (!html || typeof DOMParser === 'undefined') return null;
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const rows = Array.from(doc.querySelectorAll('tr'));
+    if (rows.length === 0) return null;
+    const lines = rows
+      .map((tr) => {
+        const cells = Array.from(tr.querySelectorAll('th, td')).map((cell) =>
+          (cell.textContent || '').replace(/\s+/g, ' ').trim()
+        );
+        return cells.join('\t');
+      })
+      .filter((line) => line.replace(/\t/g, '').trim().length > 0);
+    return lines.length > 0 ? lines.join('\n') : null;
+  } catch {
+    return null;
+  }
+}
+
+interface ParsedStudentImportRow {
+  nomor: string;
+  nis: string;
+  name: string;
+  username: string;
+  password: string;
+  classId: string;
+}
+
+function parseStudentImportData(
+  rawText: string,
+  classId: string
+): { format: 'excel' | 'csv' | 'empty'; rows: ParsedStudentImportRow[] } {
+  const trimmed = rawText.trim();
+  if (!trimmed) return { format: 'empty', rows: [] };
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter((l) => l.trim().length > 0);
+
+  if (lines.length === 0) return { format: 'empty', rows: [] };
+
+  const hasTab = lines.some((l) => l.includes('\t'));
+  const hasSemicolon = !hasTab && lines.some((l) => l.includes(';') && !l.includes(','));
+  const delimiter = hasTab ? '\t' : hasSemicolon ? ';' : ',';
+  const format: 'excel' | 'csv' = hasTab ? 'excel' : 'csv';
+
+  const rows: ParsedStudentImportRow[] = [];
+  let swapped3Cols = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawCells = splitDelimitedLine(lines[i], delimiter);
+    // Remove trailing empty cells caused by extra empty Excel columns
+    while (rawCells.length > 0 && rawCells[rawCells.length - 1] === '') {
+      rawCells.pop();
+    }
+    if (rawCells.length === 0) continue;
+
+    // Header row detection on first non-empty line
+    if (i === 0) {
+      const c0 = (rawCells[0] || '').toLowerCase();
+      const c1 = (rawCells[1] || '').toLowerCase();
+      const c2 = (rawCells[2] || '').toLowerCase();
+      const isHeader =
+        c0 === 'no' ||
+        c0 === 'no.' ||
+        c0 === 'nomor' ||
+        c0 === 'nis' ||
+        c0 === 'nisn' ||
+        c1 === 'nis' ||
+        c1 === 'nisn' ||
+        c1 === 'nama' ||
+        c1.startsWith('nama ') ||
+        c2 === 'nama' ||
+        c2.startsWith('nama ') ||
+        c2 === 'nis' ||
+        c2 === 'nisn';
+
+      if (isHeader) {
+        if (rawCells.length >= 3 && c1.includes('nama') && (c2 === 'nis' || c2 === 'nisn')) {
+          swapped3Cols = true;
+        }
+        continue;
+      }
+    }
+
+    let nomor = String(rows.length + 1);
+    let rawNis = '';
+    let rawName = '';
+
+    if (rawCells.length >= 3) {
+      nomor = rawCells[0] || nomor;
+      if (swapped3Cols) {
+        rawName = rawCells[1] || '';
+        rawNis = rawCells[2] || '';
+      } else {
+        const col1 = rawCells[1] || '';
+        const col2 =
+          delimiter === ',' && rawCells.length > 3
+            ? rawCells.slice(2).join(', ')
+            : rawCells[2] || '';
+        // Smart swap if user copied No | Nama | NIS without header
+        if (col1 && !/\d/.test(col1) && /^\d{4,}$/.test(col2)) {
+          rawName = col1;
+          rawNis = col2;
+        } else {
+          rawNis = col1;
+          rawName = col2;
+        }
+      }
+    } else if (rawCells.length === 2) {
+      const col0 = rawCells[0] || '';
+      const col1 = rawCells[1] || '';
+      if (col0 && !/\d/.test(col0) && /^\d{4,}$/.test(col1)) {
+        rawName = col0;
+        rawNis = col1;
+      } else {
+        rawNis = col0;
+        rawName = col1;
+      }
+    }
+
+    rawName = rawName.trim();
+    rawNis = rawNis.trim();
+    if (!rawName) continue;
+
+    const firstWordUser = getFirstWordUsername(rawName);
+    rows.push({
+      nomor,
+      nis: rawNis,
+      name: rawName,
+      username: firstWordUser || rawNis,
+      password: 'siswa123',
+      classId,
+    });
+  }
+
+  return { format, rows };
+}
+
 export const ClassManagementView: React.FC = () => {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher';
@@ -331,72 +497,51 @@ export const ClassManagementView: React.FC = () => {
   };
 
   const handleImportSample = () => {
-    const sample = `nomor,nis,nama lengkap
-1,20241031,Andi Pratama
-2,20241032,Bunga Citra
-3,20241033,Cahyo Utomo`;
+    const sample = `nomor\tnis\tnama lengkap
+1\t20241031\tAndi Pratama
+2\t20241032\tBunga Citra
+3\t20241033\tCahyo Utomo`;
     setCsvContent(sample);
   };
 
+  const handlePasteExcelTable = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const plain = e.clipboardData.getData('text/plain') || '';
+    const html = e.clipboardData.getData('text/html') || '';
+
+    let tableText: string | null = null;
+    if (plain.includes('\t')) {
+      tableText = plain.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    } else if (html.includes('<tr')) {
+      tableText = extractTableTextFromHtml(html);
+    }
+
+    if (tableText) {
+      e.preventDefault();
+      const target = e.currentTarget;
+      const start = target.selectionStart ?? csvContent.length;
+      const end = target.selectionEnd ?? csvContent.length;
+      const next = csvContent.slice(0, start) + tableText + csvContent.slice(end);
+      setCsvContent(next);
+    }
+  };
+
+  const parsedImportPreview = parseStudentImportData(csvContent, importTargetClassId);
+
   const handleProcessImport = async () => {
     if (!csvContent.trim() || !importTargetClassId) {
-      alert('Mohon pilih kelas tujuan dan isi data CSV siswa.');
+      alert('Mohon pilih kelas tujuan dan tempelkan data siswa dari Excel atau CSV.');
       return;
     }
 
     try {
       setIsProcessing(true);
-      const lines = csvContent.trim().split('\n');
-      const students: any[] = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        // Skip header row if present
-        if (
-          i === 0 &&
-          (line.toLowerCase().includes('nomor') ||
-            line.toLowerCase().includes('nama') ||
-            line.toLowerCase().includes('nis'))
-        ) {
-          continue;
-        }
-
-        const parts = line.split(',');
-        if (parts.length >= 3) {
-          const rawNis = parts[1]?.trim() || '';
-          const rawName = parts.slice(2).join(',').replace(/^"|"$/g, '').trim();
-          const firstWordUser = getFirstWordUsername(rawName);
-          const rawUsername = firstWordUser || rawNis;
-          const rawPassword = 'siswa123';
-
-          if (rawName) {
-            students.push({
-              name: rawName,
-              nis: rawNis,
-              username: rawUsername,
-              password: rawPassword,
-              classId: importTargetClassId,
-            });
-          }
-        } else if (parts.length === 2) {
-          // Fallback if user omitted number column: nis, nama
-          const rawNis = parts[0]?.trim() || '';
-          const rawName = parts[1]?.replace(/^"|"$/g, '').trim();
-          const firstWordUser = getFirstWordUsername(rawName);
-          const rawUsername = firstWordUser || rawNis;
-
-          if (rawName) {
-            students.push({
-              name: rawName,
-              nis: rawNis,
-              username: rawUsername,
-              password: 'siswa123',
-              classId: importTargetClassId,
-            });
-          }
-        }
-      }
+      const students = parsedImportPreview.rows.map(({ nis, name, username, password, classId }) => ({
+        name,
+        nis,
+        username,
+        password,
+        classId,
+      }));
 
       if (students.length === 0) {
         alert('Tidak ada baris siswa valid yang ditemukan.');
@@ -435,12 +580,10 @@ export const ClassManagementView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-            Manajemen Kelas & Rombongan Belajar
+            Manajemen Kelas
           </h2>
           <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-            <span>Kurikulum Merdeka (Fase E & Fase F)</span>
-            <span>·</span>
-            <span>Total {classes.length} Kelas Rombel Terdaftar</span>
+            <span>{classes.length} Kelas Terdaftar</span>
           </div>
         </div>
 
@@ -463,7 +606,7 @@ export const ClassManagementView: React.FC = () => {
         <div className="flex-1 min-w-0">
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-2">
             <School className="w-4 h-4 text-indigo-600" />
-            <span>Pilih Kelas / Rombongan Belajar (Dropdown):</span>
+            <span>PILIH KELAS</span>
           </label>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
             <select
@@ -524,13 +667,8 @@ export const ClassManagementView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2.5">
               <h3 className="text-base font-bold text-slate-900">
-                Daftar Siswa Terdaftar: {selectedClass?.name || 'Pilih Kelas'}
+                Daftar Siswa {selectedClass?.name || 'Pilih Kelas'}
               </h3>
-              {selectedClass && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
-                  Tingkat {selectedClass.gradeLevel}
-                </span>
-              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Wali Kelas: <strong>{selectedClass?.homeroomTeacher || 'Belum Ditentukan'}</strong>
@@ -571,7 +709,7 @@ export const ClassManagementView: React.FC = () => {
               title="Tampilkan & cetak seluruh data siswa dalam 1 lembar A4"
             >
               <Printer className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Data Keseluruhan (1 Lembar A4)</span>
+              <span>Cetak Data A4</span>
             </button>
             {!isTeacher && selectedClass && (
               <button
@@ -588,7 +726,7 @@ export const ClassManagementView: React.FC = () => {
               </button>
             )}
             <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg">
-              Total: {classStudentsAll.length} Siswa
+              {classStudentsAll.length} Siswa
             </span>
           </div>
         </div>
@@ -1125,11 +1263,13 @@ export const ClassManagementView: React.FC = () => {
       {/* 6. Import Students Modal */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">Impor Data Siswa Massal (CSV)</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Impor Data Siswa Massal (Tabel Excel / CSV)
+                </h3>
               </div>
               <button
                 onClick={() => setShowImportModal(false)}
@@ -1139,7 +1279,7 @@ export const ClassManagementView: React.FC = () => {
               </button>
             </div>
 
-            <div className="mt-4 space-y-3.5 text-xs">
+            <div className="mt-4 space-y-3.5 text-xs overflow-y-auto pr-1">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Pilih Kelas Rombel Tujuan:
@@ -1158,32 +1298,84 @@ export const ClassManagementView: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex items-center justify-between text-slate-600 mb-1">
-                  <span>Tempelkan data CSV (nomor, nis, nama lengkap):</span>
-                  <button
-                    onClick={handleImportSample}
-                    className="text-indigo-600 font-semibold hover:underline flex items-center gap-1"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Muat Contoh Format (3 Kolom)</span>
-                  </button>
+                <div className="flex items-center justify-between text-slate-600 mb-1 gap-2 flex-wrap">
+                  <span>Copy-paste langsung tabel dari Excel atau CSV (No, NIS, Nama Lengkap):</span>
+                  <div className="flex items-center gap-3">
+                    {csvContent.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setCsvContent('')}
+                        className="text-slate-500 hover:text-rose-600 font-semibold cursor-pointer"
+                      >
+                        Bersihkan
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleImportSample}
+                      className="text-indigo-600 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Muat Contoh Tabel (3 Kolom)</span>
+                    </button>
+                  </div>
                 </div>
 
                 <textarea
                   value={csvContent}
                   onChange={(e) => setCsvContent(e.target.value)}
-                  rows={6}
-                  placeholder={`nomor,nis,nama lengkap\n1,20241031,Andi Pratama\n2,20241032,Bunga Citra\n3,20241033,Cahyo Utomo`}
-                  className="w-full p-2.5 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  onPaste={handlePasteExcelTable}
+                  rows={5}
+                  placeholder={`Copy 3 kolom dari Excel lalu Ctrl+V di sini, contoh:\n1\t20241031\tAndi Pratama\n2\t20241032\tBunga Citra\n3\t20241033\tCahyo Utomo`}
+                  className="w-full p-2.5 font-mono text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none whitespace-pre overflow-x-auto"
                 />
               </div>
 
+              {parsedImportPreview.rows.length > 0 && (
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <span className="font-bold text-slate-700">
+                      Pratinjau Tabel Data Siswa ({parsedImportPreview.rows.length} siswa siap diimpor)
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {parsedImportPreview.format === 'excel'
+                        ? 'Tabel Excel Terdeteksi'
+                        : 'Format CSV Terdeteksi'}
+                    </span>
+                  </div>
+                  <div className="max-h-44 overflow-y-auto">
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-200 sticky top-0">
+                        <tr>
+                          <th className="py-1.5 px-2.5 w-12">No</th>
+                          <th className="py-1.5 px-2.5">NIS</th>
+                          <th className="py-1.5 px-2.5">Nama Lengkap</th>
+                          <th className="py-1.5 px-2.5">Username</th>
+                          <th className="py-1.5 px-2.5">Password</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {parsedImportPreview.rows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/70">
+                            <td className="py-1.5 px-2.5 font-mono text-slate-500">{row.nomor}</td>
+                            <td className="py-1.5 px-2.5 font-mono text-slate-700">{row.nis || '-'}</td>
+                            <td className="py-1.5 px-2.5 font-semibold text-slate-900">{row.name}</td>
+                            <td className="py-1.5 px-2.5 font-mono text-indigo-600">{row.username}</td>
+                            <td className="py-1.5 px-2.5 font-mono text-slate-500">{row.password}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-[11px] leading-relaxed">
-                <strong>Catatan:</strong> Cukup 3 kolom: <code>nomor, nis, nama lengkap</code>. Username otomatis dibuat dari kata pertama nama lengkap (huruf kecil), dan kata sandi awal default: <code>siswa123</code>.
+                <strong>Catatan:</strong> Anda dapat langsung memblok dan copy tabel 3 kolom dari <strong>Microsoft Excel / Google Sheets</strong> (<code>No | NIS | Nama Lengkap</code>) maupun format CSV (<code>nomor, nis, nama lengkap</code>). Username otomatis dibuat dari kata pertama nama lengkap (huruf kecil), dan kata sandi awal default: <code>siswa123</code>.
               </div>
             </div>
 
-            <div className="pt-4 mt-4 border-t border-slate-200 flex justify-end gap-2">
+            <div className="pt-4 mt-4 border-t border-slate-200 flex justify-end gap-2 shrink-0">
               <button
                 onClick={() => setShowImportModal(false)}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
@@ -1193,11 +1385,17 @@ export const ClassManagementView: React.FC = () => {
               </button>
               <button
                 onClick={handleProcessImport}
-                disabled={isProcessing || !csvContent.trim()}
-                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5"
+                disabled={isProcessing || parsedImportPreview.rows.length === 0}
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span>{isProcessing ? 'Mengimpor...' : 'Impor Siswa Sekarang'}</span>
+                <span>
+                  {isProcessing
+                    ? 'Mengimpor...'
+                    : parsedImportPreview.rows.length > 0
+                    ? `Impor ${parsedImportPreview.rows.length} Siswa Sekarang`
+                    : 'Impor Siswa Sekarang'}
+                </span>
               </button>
             </div>
           </div>
@@ -1258,7 +1456,7 @@ export const ClassManagementView: React.FC = () => {
               </div>
 
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600 leading-relaxed">
-                Password baru akan langsung tersimpan ke database dan otomatis muncul saat Anda mencetak <strong>Kartu Siswa</strong> atau <strong>Data Keseluruhan (1 Lembar A4)</strong>.
+                Password baru akan langsung tersimpan ke database dan otomatis muncul saat Anda mencetak <strong>Kartu Siswa</strong> atau <strong>Cetak Data A4</strong>.
               </div>
             </div>
 

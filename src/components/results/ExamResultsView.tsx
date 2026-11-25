@@ -395,7 +395,7 @@ export const ExamResultsView: React.FC<ExamResultsViewProps> = ({
                           <div>{r.examTitle}</div>
                           {r.isRemedial && (
                             <div className="text-[10px] font-mono text-amber-700 mt-0.5">
-                              Percobaan ke-{r.attemptCount || 1} · Nilai Awal {r.baseScore ?? 0} + Remedial {r.addedScore ?? 0} (Maks KKM {r.kktpScore ?? 75}){' '}
+                              Percobaan ke-{r.attemptCount || 1} · KKM {r.kktpScore ?? 75}{' '}
                               {r.isRemedialPassed ? '· Tuntas Remedial' : '· Belum Lulus'}
                             </div>
                           )}
