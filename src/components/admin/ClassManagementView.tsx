@@ -88,11 +88,13 @@ interface ParsedStudentImportRow {
   username: string;
   password: string;
   classId: string;
+  duplicateNis?: boolean;
 }
 
 function parseStudentImportData(
   rawText: string,
-  classId: string
+  classId: string,
+  existingUsers: User[] = []
 ): { format: 'excel' | 'csv' | 'empty'; rows: ParsedStudentImportRow[] } {
   const trimmed = rawText.trim();
   if (!trimmed) return { format: 'empty', rows: [] };
@@ -108,6 +110,16 @@ function parseStudentImportData(
   const hasSemicolon = !hasTab && lines.some((l) => l.includes(';') && !l.includes(','));
   const delimiter = hasTab ? '\t' : hasSemicolon ? ';' : ',';
   const format: 'excel' | 'csv' = hasTab ? 'excel' : 'csv';
+
+  const usedUsernames = new Set<string>(
+    existingUsers.map((u) => String(u.username || '').trim().toLowerCase()).filter(Boolean)
+  );
+  const usedNis = new Set<string>(
+    existingUsers
+      .filter((u) => u.role === 'student' && u.nis)
+      .map((u) => String(u.nis).trim().toLowerCase())
+      .filter(Boolean)
+  );
 
   const rows: ParsedStudentImportRow[] = [];
   let swapped3Cols = false;
@@ -188,14 +200,27 @@ function parseStudentImportData(
     rawNis = rawNis.trim();
     if (!rawName) continue;
 
-    const firstWordUser = getFirstWordUsername(rawName);
+    const duplicateNis = Boolean(rawNis && usedNis.has(rawNis.toLowerCase()));
+    const baseUsername = getFirstWordUsername(rawName) || rawNis.toLowerCase().replace(/[^a-z0-9_]/gi, '');
+    let resolvedUsername = baseUsername;
+    if (!duplicateNis && resolvedUsername) {
+      let suffix = 2;
+      while (usedUsernames.has(resolvedUsername.toLowerCase())) {
+        resolvedUsername = `${baseUsername}${suffix}`;
+        suffix++;
+      }
+      usedUsernames.add(resolvedUsername.toLowerCase());
+      if (rawNis) usedNis.add(rawNis.toLowerCase());
+    }
+
     rows.push({
       nomor,
       nis: rawNis,
       name: rawName,
-      username: firstWordUser || rawNis,
+      username: resolvedUsername,
       password: 'siswa123',
       classId,
+      duplicateNis,
     });
   }
 
@@ -383,11 +408,11 @@ export const ClassManagementView: React.FC = () => {
 
     try {
       setIsProcessing(true);
-      await api.deleteClass(deletingClass.id);
+      const res = await api.deleteClass(deletingClass.id);
       setShowDeleteClassModal(false);
       setDeletingClass(null);
       await loadData();
-      alert('Kelas berhasil dihapus.');
+      alert(res.message || 'Kelas dan data murid pada kelas tersebut berhasil dihapus.');
     } catch (err: any) {
       alert(err.message || 'Gagal menghapus kelas.');
     } finally {
@@ -525,7 +550,8 @@ export const ClassManagementView: React.FC = () => {
     }
   };
 
-  const parsedImportPreview = parseStudentImportData(csvContent, importTargetClassId);
+  const parsedImportPreview = parseStudentImportData(csvContent, importTargetClassId, users);
+  const readyImportRows = parsedImportPreview.rows.filter((r) => !r.duplicateNis);
 
   const handleProcessImport = async () => {
     if (!csvContent.trim() || !importTargetClassId) {
@@ -535,7 +561,7 @@ export const ClassManagementView: React.FC = () => {
 
     try {
       setIsProcessing(true);
-      const students = parsedImportPreview.rows.map(({ nis, name, username, password, classId }) => ({
+      const students = readyImportRows.map(({ nis, name, username, password, classId }) => ({
         name,
         nis,
         username,
@@ -544,7 +570,11 @@ export const ClassManagementView: React.FC = () => {
       }));
 
       if (students.length === 0) {
-        alert('Tidak ada baris siswa valid yang ditemukan.');
+        alert(
+          parsedImportPreview.rows.length > 0
+            ? 'Semua siswa pada daftar tersebut memiliki NIS yang sudah terdaftar.'
+            : 'Tidak ada baris siswa valid yang ditemukan.'
+        );
         return;
       }
 
@@ -1058,7 +1088,11 @@ export const ClassManagementView: React.FC = () => {
             </div>
 
             <p className="text-slate-600 leading-relaxed mb-4">
-              Apakah Anda yakin ingin menghapus kelas <strong className="text-slate-900">{deletingClass.name}</strong>? Siswa yang terdaftar pada kelas ini akan dialihkan ke status tanpa kelas.
+              Apakah Anda yakin ingin menghapus kelas <strong className="text-slate-900">{deletingClass.name}</strong>? Semua data & akun murid (
+              <strong>
+                {users.filter((u) => u.role === 'student' && u.classId === deletingClass.id).length} murid
+              </strong>
+              ) yang terdaftar pada kelas ini juga akan ikut dihapus dari Manajemen Akun.
             </p>
 
             <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
@@ -1170,7 +1204,6 @@ export const ClassManagementView: React.FC = () => {
                   onChange={(e) => setEditStudentClassId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="">Tanpa Kelas (Belum Dialokasikan)</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} (Tingkat {c.gradeLevel})
@@ -1333,9 +1366,13 @@ export const ClassManagementView: React.FC = () => {
 
               {parsedImportPreview.rows.length > 0 && (
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-wrap">
                     <span className="font-bold text-slate-700">
-                      Pratinjau Tabel Data Siswa ({parsedImportPreview.rows.length} siswa siap diimpor)
+                      Pratinjau Tabel Data Siswa ({readyImportRows.length} siap diimpor
+                      {parsedImportPreview.rows.length > readyImportRows.length
+                        ? ` · ${parsedImportPreview.rows.length - readyImportRows.length} NIS sudah terdaftar`
+                        : ''}
+                      )
                     </span>
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                       {parsedImportPreview.format === 'excel'
@@ -1356,10 +1393,20 @@ export const ClassManagementView: React.FC = () => {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {parsedImportPreview.rows.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/70">
+                          <tr
+                            key={idx}
+                            className={row.duplicateNis ? 'bg-amber-50/60 text-slate-400' : 'hover:bg-slate-50/70'}
+                          >
                             <td className="py-1.5 px-2.5 font-mono text-slate-500">{row.nomor}</td>
                             <td className="py-1.5 px-2.5 font-mono text-slate-700">{row.nis || '-'}</td>
-                            <td className="py-1.5 px-2.5 font-semibold text-slate-900">{row.name}</td>
+                            <td className="py-1.5 px-2.5 font-semibold text-slate-900">
+                              {row.name}
+                              {row.duplicateNis && (
+                                <span className="ml-1.5 text-[10px] font-normal text-amber-700">
+                                  (NIS sudah ada)
+                                </span>
+                              )}
+                            </td>
                             <td className="py-1.5 px-2.5 font-mono text-indigo-600">{row.username}</td>
                             <td className="py-1.5 px-2.5 font-mono text-slate-500">{row.password}</td>
                           </tr>
@@ -1371,7 +1418,7 @@ export const ClassManagementView: React.FC = () => {
               )}
 
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 text-[11px] leading-relaxed">
-                <strong>Catatan:</strong> Anda dapat langsung memblok dan copy tabel 3 kolom dari <strong>Microsoft Excel / Google Sheets</strong> (<code>No | NIS | Nama Lengkap</code>) maupun format CSV (<code>nomor, nis, nama lengkap</code>). Username otomatis dibuat dari kata pertama nama lengkap (huruf kecil), dan kata sandi awal default: <code>siswa123</code>.
+                <strong>Catatan:</strong> Anda dapat langsung memblok dan copy tabel 3 kolom dari <strong>Microsoft Excel / Google Sheets</strong> (<code>No | NIS | Nama Lengkap</code>) maupun format CSV (<code>nomor, nis, nama lengkap</code>). Username otomatis dibuat dari kata pertama nama lengkap (jika ada nama depan yang sama, otomatis diberi angka pembeda), dan kata sandi awal default: <code>siswa123</code>.
               </div>
             </div>
 
@@ -1385,15 +1432,15 @@ export const ClassManagementView: React.FC = () => {
               </button>
               <button
                 onClick={handleProcessImport}
-                disabled={isProcessing || parsedImportPreview.rows.length === 0}
+                disabled={isProcessing || readyImportRows.length === 0}
                 className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-xs disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>
                   {isProcessing
                     ? 'Mengimpor...'
-                    : parsedImportPreview.rows.length > 0
-                    ? `Impor ${parsedImportPreview.rows.length} Siswa Sekarang`
+                    : readyImportRows.length > 0
+                    ? `Impor ${readyImportRows.length} Siswa Sekarang`
                     : 'Impor Siswa Sekarang'}
                 </span>
               </button>

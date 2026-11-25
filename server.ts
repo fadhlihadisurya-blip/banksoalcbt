@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc, writeBatch } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 import {
   assignMissingQuestionCodes,
@@ -124,11 +124,37 @@ async function loadFromFirestore() {
       };
     });
 
-    for (const item of usersToBackfill) {
-      await persistDocToFirestore('users', item.id, item.patch);
+    db.classes = classesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const validClassIds = new Set(db.classes.map((c: any) => c.id));
+    const classlessStudentIds = new Set<string>(
+      db.users
+        .filter(
+          (u: any) =>
+            u.role === 'student' && (!u.classId || String(u.classId).trim() === '' || !validClassIds.has(u.classId))
+        )
+        .map((u: any) => u.id)
+    );
+
+    if (classlessStudentIds.size > 0) {
+      db.users = db.users.filter((u: any) => !classlessStudentIds.has(u.id));
+      const idsToDelete = Array.from(classlessStudentIds);
+      const chunkSize = 400;
+      for (let i = 0; i < idsToDelete.length; i += chunkSize) {
+        const batch = writeBatch(firestoreDb);
+        for (const uid of idsToDelete.slice(i, i + chunkSize)) {
+          batch.delete(doc(firestoreDb, 'users', uid));
+        }
+        await batch.commit();
+      }
+      saveDatabase();
+      console.log(`[Server Firestore Cleanup] Menghapus ${idsToDelete.length} akun murid tanpa kelas.`);
     }
 
-    db.classes = classesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    for (const item of usersToBackfill) {
+      if (!classlessStudentIds.has(item.id)) {
+        await persistDocToFirestore('users', item.id, item.patch);
+      }
+    }
     db.questions = questionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     db.exams = examsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -764,28 +790,66 @@ app.post('/api/admin/users/toggle-status', async (req, res) => {
   res.json({ success: true, isActive: user.isActive });
 });
 
-// Bulk import students via CSV/JSON
+// Bulk import students via CSV/Excel/JSON
 app.post('/api/admin/students/bulk-import', async (req, res) => {
   const { students } = req.body;
   if (!Array.isArray(students) || students.length === 0) {
     return res.status(400).json({ error: 'Data siswa kosong.' });
   }
 
-  let imported = 0;
+  const existingUsernames = new Set<string>(
+    db.users.map((u: any) => String(u.username || '').trim().toLowerCase()).filter(Boolean)
+  );
+  const existingNis = new Set<string>(
+    db.users
+      .filter((u: any) => u.role === 'student' && u.nis)
+      .map((u: any) => String(u.nis).trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const createdStudents: any[] = [];
+  let skippedDuplicateNis = 0;
+  let skippedInvalid = 0;
+
   for (const s of students) {
-    const username = s.username || s.nis;
-    if (!username || db.users.some((u: any) => u.username.toLowerCase() === username.toLowerCase())) {
+    const cleanName = String(s.name || '').trim();
+    const cleanNis = String(s.nis || '').trim();
+    const baseUsername = String(s.username || cleanNis || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/gi, '');
+
+    if (!cleanName || !baseUsername) {
+      skippedInvalid++;
       continue;
     }
 
+    if (cleanNis && existingNis.has(cleanNis.toLowerCase())) {
+      skippedDuplicateNis++;
+      continue;
+    }
+
+    let finalUsername = baseUsername;
+    let suffix = 2;
+    while (existingUsernames.has(finalUsername.toLowerCase())) {
+      finalUsername = `${baseUsername}${suffix}`;
+      suffix++;
+    }
+
+    existingUsernames.add(finalUsername.toLowerCase());
+    if (cleanNis) {
+      existingNis.add(cleanNis.toLowerCase());
+    }
+
+    const rawPass = String(s.password || 'siswa123').trim() || 'siswa123';
     const newStudent = {
-      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      username,
-      passwordHash: hashPassword(s.password || 'siswa123'),
-      plainPassword: s.password || 'siswa123',
-      name: s.name,
+      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${createdStudents.length}`,
+      username: finalUsername,
+      passwordHash: hashPassword(rawPass),
+      plainPassword: rawPass,
+      name: cleanName,
       role: 'student',
-      nis: s.nis,
+      nis: cleanNis || finalUsername,
       nisn: s.nisn || '',
       classId: s.classId || '',
       email: s.email || '',
@@ -793,12 +857,42 @@ app.post('/api/admin/students/bulk-import', async (req, res) => {
       createdAt: new Date().toISOString(),
     };
     db.users.push(newStudent);
-    await persistDocToFirestore('users', newStudent.id, newStudent);
-    imported++;
+    createdStudents.push(newStudent);
+  }
+
+  if (firestoreDb && createdStudents.length > 0) {
+    pendingWrites++;
+    try {
+      const chunkSize = 400;
+      for (let i = 0; i < createdStudents.length; i += chunkSize) {
+        const batch = writeBatch(firestoreDb);
+        const slice = createdStudents.slice(i, i + chunkSize);
+        for (const st of slice) {
+          batch.set(doc(firestoreDb, 'users', st.id), stripUndefinedDeep(st), { merge: true });
+        }
+        await batch.commit();
+      }
+      lastFirestoreSyncAt = Date.now();
+    } catch (e) {
+      console.warn('[Firestore Sync] Gagal menyimpan batch impor siswa:', e);
+    } finally {
+      pendingWrites = Math.max(0, pendingWrites - 1);
+    }
   }
 
   saveDatabase();
-  res.json({ success: true, count: imported, message: `Berhasil mengimpor ${imported} akun siswa.` });
+
+  const notes: string[] = [];
+  if (skippedDuplicateNis > 0) notes.push(`${skippedDuplicateNis} dilewati karena NIS sudah terdaftar`);
+  if (skippedInvalid > 0) notes.push(`${skippedInvalid} baris tidak valid`);
+  const suffixMsg = notes.length > 0 ? ` (${notes.join(', ')})` : '';
+
+  res.json({
+    success: true,
+    count: createdStudents.length,
+    skippedDuplicateNis,
+    message: `Berhasil mengimpor ${createdStudents.length} akun siswa.${suffixMsg}`,
+  });
 });
 
 // Bulk generate random passwords for students (all or by classId)
@@ -832,6 +926,50 @@ app.post('/api/admin/students/generate-passwords', async (req, res) => {
     success: true,
     count: targets.length,
     message: `Berhasil mengacak password baru untuk ${targets.length} siswa.`,
+  });
+});
+
+// Delete all student accounts without a valid class
+app.post('/api/admin/students/delete-classless', async (_req, res) => {
+  const validClassIds = new Set(db.classes.map((c: any) => c.id));
+  const orphanIds = db.users
+    .filter(
+      (u: any) =>
+        u.role === 'student' && (!u.classId || String(u.classId).trim() === '' || !validClassIds.has(u.classId))
+    )
+    .map((u: any) => u.id);
+
+  if (orphanIds.length === 0) {
+    return res.json({ success: true, count: 0, message: 'Tidak ada data murid tanpa kelas.' });
+  }
+
+  const orphanSet = new Set(orphanIds);
+  db.users = db.users.filter((u: any) => !orphanSet.has(u.id));
+
+  if (firestoreDb) {
+    pendingWrites++;
+    try {
+      const chunkSize = 400;
+      for (let i = 0; i < orphanIds.length; i += chunkSize) {
+        const batch = writeBatch(firestoreDb);
+        for (const uid of orphanIds.slice(i, i + chunkSize)) {
+          batch.delete(doc(firestoreDb, 'users', uid));
+        }
+        await batch.commit();
+      }
+      lastFirestoreSyncAt = Date.now();
+    } catch (e) {
+      console.warn('[Firestore Cleanup] Gagal menghapus murid tanpa kelas:', e);
+    } finally {
+      pendingWrites = Math.max(0, pendingWrites - 1);
+    }
+  }
+
+  saveDatabase();
+  res.json({
+    success: true,
+    count: orphanIds.length,
+    message: `Berhasil menghapus ${orphanIds.length} data murid tanpa kelas.`,
   });
 });
 
@@ -880,18 +1018,53 @@ app.delete('/api/classes/:id', async (req, res) => {
   const clsIndex = db.classes.findIndex((c: any) => c.id === id);
   if (clsIndex === -1) return res.status(404).json({ error: 'Kelas tidak ditemukan.' });
 
-  // Unlink students in this class
+  // Delete all students belonging to this class (and unlink any non-student references)
+  const studentIdsToDelete: string[] = [];
   for (const u of db.users) {
     if (u.classId === id) {
-      u.classId = '';
-      await persistDocToFirestore('users', u.id, { classId: '' });
+      if (u.role === 'student') {
+        studentIdsToDelete.push(u.id);
+      } else {
+        u.classId = '';
+        await persistDocToFirestore('users', u.id, { classId: '' });
+      }
+    }
+  }
+
+  if (studentIdsToDelete.length > 0) {
+    const deleteSet = new Set(studentIdsToDelete);
+    db.users = db.users.filter((u: any) => !deleteSet.has(u.id));
+    if (firestoreDb) {
+      pendingWrites++;
+      try {
+        const chunkSize = 400;
+        for (let i = 0; i < studentIdsToDelete.length; i += chunkSize) {
+          const batch = writeBatch(firestoreDb);
+          for (const uid of studentIdsToDelete.slice(i, i + chunkSize)) {
+            batch.delete(doc(firestoreDb, 'users', uid));
+          }
+          await batch.commit();
+        }
+        lastFirestoreSyncAt = Date.now();
+      } catch (e) {
+        console.warn('[Firestore Sync] Gagal menghapus murid saat hapus kelas:', e);
+      } finally {
+        pendingWrites = Math.max(0, pendingWrites - 1);
+      }
     }
   }
 
   db.classes.splice(clsIndex, 1);
   await deleteDocFromFirestore('classes', id);
   saveDatabase();
-  res.json({ success: true, message: 'Kelas berhasil dihapus dari sistem & Firestore.' });
+  res.json({
+    success: true,
+    deletedStudentsCount: studentIdsToDelete.length,
+    message:
+      studentIdsToDelete.length > 0
+        ? `Kelas dan ${studentIdsToDelete.length} data murid berhasil dihapus dari sistem & Firestore.`
+        : 'Kelas berhasil dihapus dari sistem & Firestore.',
+  });
 });
 
 // 1.5. School Settings Management

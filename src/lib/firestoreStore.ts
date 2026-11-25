@@ -230,10 +230,66 @@ export const firestoreStore = {
     try {
       await deleteDoc(doc(db, 'classes', id));
       const usersSnap = await getDocs(query(collection(db, 'users'), where('classId', '==', id)));
+      const studentRefs: any[] = [];
       for (const uDoc of usersSnap.docs) {
-        await updateDoc(uDoc.ref, { classId: '' });
+        if (uDoc.data()?.role === 'student') {
+          studentRefs.push(uDoc.ref);
+        } else {
+          await updateDoc(uDoc.ref, { classId: '' });
+        }
       }
-      return { success: true, message: 'Kelas berhasil dihapus dari Firestore.' };
+      const chunkSize = 400;
+      for (let i = 0; i < studentRefs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        for (const ref of studentRefs.slice(i, i + chunkSize)) {
+          batch.delete(ref);
+        }
+        await batch.commit();
+      }
+      return {
+        success: true,
+        deletedStudentsCount: studentRefs.length,
+        message:
+          studentRefs.length > 0
+            ? `Kelas dan ${studentRefs.length} data murid berhasil dihapus dari Firestore.`
+            : 'Kelas berhasil dihapus dari Firestore.',
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  deleteClasslessStudents: async () => {
+    const path = 'users';
+    try {
+      const [classesSnap, usersSnap] = await Promise.all([
+        getDocs(collection(db, 'classes')),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'student'))),
+      ]);
+      const validClassIds = new Set(classesSnap.docs.map((d) => d.id));
+      const orphanRefs = usersSnap.docs
+        .filter((d) => {
+          const cid = d.data()?.classId;
+          return !cid || String(cid).trim() === '' || !validClassIds.has(cid);
+        })
+        .map((d) => d.ref);
+
+      const chunkSize = 400;
+      for (let i = 0; i < orphanRefs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        for (const ref of orphanRefs.slice(i, i + chunkSize)) {
+          batch.delete(ref);
+        }
+        await batch.commit();
+      }
+      return {
+        success: true,
+        count: orphanRefs.length,
+        message:
+          orphanRefs.length > 0
+            ? `Berhasil menghapus ${orphanRefs.length} data murid tanpa kelas dari Firestore.`
+            : 'Tidak ada data murid tanpa kelas.',
+      };
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
@@ -355,29 +411,81 @@ export const firestoreStore = {
   bulkImportStudents: async (students: any[]) => {
     const path = 'users';
     try {
-      let count = 0;
-      for (const s of students) {
-        const username = s.username || s.nis;
-        if (!username) continue;
-        const plainPassword = String(s.password || 'siswa123').trim();
-        const passwordHash = await hashPasswordAsync(plainPassword);
-        const id = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        await setDoc(doc(db, path, id), stripUndefinedDeep({
-          id,
-          username,
-          name: s.name,
-          role: 'student',
-          nis: s.nis || username,
-          classId: s.classId || '',
-          plainPassword,
-          ...(passwordHash ? { passwordHash } : {}),
-          email: s.email || '',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        }));
-        count++;
+      const existingSnap = await getDocs(collection(db, path));
+      const existingUsernames = new Set<string>();
+      const existingNis = new Set<string>();
+
+      for (const d of existingSnap.docs) {
+        const u = d.data() as any;
+        if (u.username) existingUsernames.add(String(u.username).trim().toLowerCase());
+        if (u.role === 'student' && u.nis) existingNis.add(String(u.nis).trim().toLowerCase());
       }
-      return { success: true, count, message: `Berhasil mengimpor ${count} siswa ke Cloud Firestore.` };
+
+      const toInsert: any[] = [];
+      let skippedDuplicateNis = 0;
+
+      for (const s of students) {
+        const cleanName = String(s.name || '').trim();
+        const cleanNis = String(s.nis || '').trim();
+        const baseUsername = String(s.username || cleanNis || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/gi, '');
+        if (!cleanName || !baseUsername) continue;
+
+        if (cleanNis && existingNis.has(cleanNis.toLowerCase())) {
+          skippedDuplicateNis++;
+          continue;
+        }
+
+        let finalUsername = baseUsername;
+        let suffix = 2;
+        while (existingUsernames.has(finalUsername.toLowerCase())) {
+          finalUsername = `${baseUsername}${suffix}`;
+          suffix++;
+        }
+        existingUsernames.add(finalUsername.toLowerCase());
+        if (cleanNis) existingNis.add(cleanNis.toLowerCase());
+
+        const plainPassword = String(s.password || 'siswa123').trim() || 'siswa123';
+        const passwordHash = await hashPasswordAsync(plainPassword);
+        const id = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${toInsert.length}`;
+        toInsert.push(
+          stripUndefinedDeep({
+            id,
+            username: finalUsername,
+            name: cleanName,
+            role: 'student',
+            nis: cleanNis || finalUsername,
+            classId: s.classId || '',
+            plainPassword,
+            ...(passwordHash ? { passwordHash } : {}),
+            email: s.email || '',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+          })
+        );
+      }
+
+      const chunkSize = 400;
+      for (let i = 0; i < toInsert.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        const slice = toInsert.slice(i, i + chunkSize);
+        for (const studentDoc of slice) {
+          batch.set(doc(db, path, studentDoc.id), studentDoc);
+        }
+        await batch.commit();
+      }
+
+      const extra =
+        skippedDuplicateNis > 0
+          ? ` (${skippedDuplicateNis} dilewati karena NIS sudah terdaftar)`
+          : '';
+      return {
+        success: true,
+        count: toInsert.length,
+        message: `Berhasil mengimpor ${toInsert.length} siswa ke Cloud Firestore.${extra}`,
+      };
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }

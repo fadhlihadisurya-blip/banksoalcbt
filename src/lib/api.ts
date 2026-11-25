@@ -144,6 +144,11 @@ export const api = {
       body: JSON.stringify({ classId: classId || '' }),
     }),
 
+  deleteClasslessStudents: () =>
+    request<{ success: boolean; count: number; message: string }>('/admin/students/delete-classless', {
+      method: 'POST',
+    }),
+
   getClasses: () =>
     request<{ classes: ClassGroup[]; academicYears: AcademicYear[] }>('/classes'),
 
@@ -160,7 +165,7 @@ export const api = {
     }),
 
   deleteClass: (id: string) =>
-    request<{ success: boolean; message: string }>(`/classes/${id}`, {
+    request<{ success: boolean; deletedStudentsCount?: number; message: string }>(`/classes/${id}`, {
       method: 'DELETE',
     }),
 

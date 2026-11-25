@@ -176,6 +176,12 @@ export const clientStore = {
       if (fsRes) return fsRes as unknown as T;
     }
 
+    // Delete Classless Students
+    if (cleanPath === '/admin/students/delete-classless' && method === 'POST') {
+      const fsRes = await firestoreStore.deleteClasslessStudents();
+      if (fsRes) return fsRes as unknown as T;
+    }
+
     // 3. Auth Login & Password Change
     if (cleanPath === '/auth/change-password' && method === 'POST') {
       const { userId, oldPassword, newPassword } = body || {};
